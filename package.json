@@ -1,0 +1,28 @@
+{
+  "name": "koya",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:seed": "pnpm --filter @koya/supabase seed",
+    "db:verify": "pnpm --filter @koya/supabase verify",
+    "kb:ingest": "pnpm --filter @koya/supabase kb:ingest",
+    "mcp:dev": "pnpm --filter @koya/mcp-server dev",
+    "mcp:smoke": "pnpm --filter @koya/mcp-server smoke",
+    "agent:dev": "pnpm --filter @koya/agent-server dev",
+    "web:dev": "pnpm --filter @koya/web dev",
+    "chat": "pnpm --filter @koya/agent-server chat",
+    "eval": "pnpm --filter @koya/agent-server eval",
+    "vapi:sync": "pnpm --filter @koya/agent-server vapi:sync"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

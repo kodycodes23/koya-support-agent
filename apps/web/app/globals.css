@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* RelayPay brand direction: deep blue primary, teal accent, off-white background.
+   Calm and minimal: no gradients, no neon, restrained highlights. */
+:root {
+  --brand: #0b2a5b;
+  --brand-hover: #0a2350;
+  --accent: #0891b2;
+  --accent-soft: #e6f4f8;
+  --background: #f4f6f9;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #16202e;
+  --muted: #5b6676;
+  --navy: #0a2150; /* hero panel: the deep-blue primary, one step darker for contrast */
+  --navy-line: rgba(255, 255, 255, 0.12);
+  --on-navy: #ffffff;
+  --on-navy-muted: #a9b8d3;
+  --accent-on-navy: #5cc6dc;
+  --danger: #a4262c;
+  --danger-soft: #fbeaea;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-navy: var(--navy);
+  --color-navy-line: var(--navy-line);
+  --color-on-navy: var(--on-navy);
+  --color-on-navy-muted: var(--on-navy-muted);
+  --color-accent-on-navy: var(--accent-on-navy);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-dot {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Flat dot grid for the hero panel (an SVG tile, not a gradient). */
+.dot-grid {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23ffffff' fill-opacity='0.07'/%3E%3C/svg%3E");
+}
+

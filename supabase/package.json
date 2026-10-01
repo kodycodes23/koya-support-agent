@@ -1,0 +1,19 @@
+{
+  "name": "@koya/supabase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "tsx seed/seed.ts",
+    "verify": "tsx seed/verify.ts",
+    "kb:ingest": "tsx seed/ingest-kb.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@koya/shared": "workspace:*",
+    "csv-parse": "^6",
+    "zod": "^4"
+  }
+}
