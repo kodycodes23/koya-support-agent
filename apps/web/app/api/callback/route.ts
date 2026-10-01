@@ -1,5 +1,6 @@
+import { DUPLICATE_WINDOW_MINUTES, REPEAT_WINDOW_HOURS, referencesIn, sameIssue, since } from "@koya/shared/duplicates";
 import { emailConfigFromEnv, notifySupportTeam } from "@koya/shared/email";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { getSession } from "../../lib/session";
 import { z } from "zod";
@@ -44,6 +45,32 @@ function rateLimited(ip: string): boolean {
   return recent.length > MAX_PER_WINDOW;
 }
 
+/** Emails the support team; runs after the response is sent, and a failure never affects the request. */
+async function emailTeam(
+  db: SupabaseClient,
+  e: { reference: string; category: string; reason: string; name: string; email: string; customerId: string; preferredTime: string | null; followUp: string; repeatContact: { openedAt: Date } | null },
+) {
+  try {
+    const { data: customer } = await db.from("customers").select("company_name").eq("customer_id", e.customerId).maybeSingle();
+    const id = await notifySupportTeam(emailConfigFromEnv(), {
+      reference: e.reference,
+      source: "callback-form",
+      category: e.category,
+      reason: e.reason,
+      userName: e.name,
+      userEmail: e.email.toLowerCase(),
+      customerId: e.customerId,
+      company: (customer?.company_name as string | undefined) ?? null,
+      preferredTime: e.preferredTime,
+      followUp: e.followUp,
+      repeatContact: e.repeatContact,
+    });
+    console.log(JSON.stringify({ level: id === null ? "warn" : "info", msg: id === null ? "RESEND_API_KEY not set: support-team email skipped" : "support team emailed", reference: e.reference, repeat: Boolean(e.repeatContact), emailId: id }));
+  } catch (err) {
+    console.error(JSON.stringify({ level: "error", msg: "support-team email failed (request is still recorded)", reference: e.reference, error: (err as Error).message }));
+  }
+}
+
 export async function POST(request: Request) {
   // Only signed-in customers can request a callback (the form lives on the sign-in-only /support page).
   const session = await getSession();
@@ -74,14 +101,77 @@ export async function POST(request: Request) {
     : `A RelayPay specialist will follow up with ${firstName} by email.`;
 
   const db = createClient(new URL(url).origin, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const category = TOPICS[topic];
+  const reason = details ? `Callback requested from the support page: ${details}` : "Callback requested from the support page.";
+
+  // Duplicates: the same request again within a few minutes is ignored; a later one about the same
+  // open case (from the form or a Koya call) reuses it and tells the support team they got in touch again.
+  const now = new Date();
+  const { data: openCases, error: lookupError } = await db
+    .from("escalations")
+    .select("id, escalation_ref, category, reason, preferred_time, created_at")
+    .eq("customer_id", session.customerId)
+    .neq("status", "closed")
+    .gte("created_at", since(now, REPEAT_WINDOW_HOURS * 60))
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (lookupError) {
+    console.error(JSON.stringify({ level: "error", msg: "callback duplicate check failed", error: lookupError.message }));
+    return Response.json({ error: "We couldn't save your request. Please try again." }, { status: 500 });
+  }
+  const issue = { category, refs: referencesIn(details) };
+  // Timestamps are compared as dates: Postgres and JS format them differently.
+  const isRecent = (c: { created_at: unknown }) => Date.parse(String(c.created_at)) >= Date.parse(since(now, DUPLICATE_WINDOW_MINUTES));
+  const existing = (openCases ?? []).find((c) => {
+    const other = { category: c.category as string, refs: referencesIn(c.reason as string) };
+    return sameIssue(issue, other, { strict: !isRecent(c) });
+  });
+
+  if (existing) {
+    const reference = existing.escalation_ref as string;
+    const openedAt = new Date(existing.created_at as string);
+    if (isRecent(existing)) {
+      return Response.json({
+        ok: true,
+        duplicate: true,
+        reference,
+        message: "You sent this request a few minutes ago, so there's no need to send it again. A RelayPay specialist will be in touch.",
+      });
+    }
+    const newTime = preferredTime && preferredTime !== existing.preferred_time ? preferredTime : null;
+    if (newTime) {
+      await db.from("escalations").update({ preferred_time: newTime, call_booked: true, follow_up_summary: followUp }).eq("id", existing.id);
+    }
+    const opened = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(openedAt);
+    after(() =>
+      emailTeam(db, {
+        reference,
+        category,
+        reason: details || "Callback requested again from the support page.",
+        name,
+        email,
+        customerId: session.customerId,
+        preferredTime: newTime ?? (existing.preferred_time as string | null),
+        followUp,
+        repeatContact: { openedAt },
+      }),
+    );
+    return Response.json({
+      ok: true,
+      repeat: true,
+      reference,
+      message: `You already have an open request for this from ${opened}. We've let the specialist team know you got in touch again${newTime ? " and updated your preferred time" : ""}.`,
+    });
+  }
+
   const { data, error } = await db
     .from("escalations")
     .insert({
       user_name: name,
       user_email: email.toLowerCase(),
-      category: TOPICS[topic],
+      category,
       customer_id: session.customerId,
-      reason: details ? `Callback requested from the support page: ${details}` : "Callback requested from the support page.",
+      reason,
       call_booked: Boolean(preferredTime),
       preferred_time: preferredTime || null,
       follow_up_summary: followUp,
@@ -96,25 +186,18 @@ export async function POST(request: Request) {
 
   // Email the support team once the response has been sent; a failure never affects the request.
   const reference = data.escalation_ref as string;
-  after(async () => {
-    try {
-      const { data: customer } = await db.from("customers").select("company_name").eq("customer_id", session.customerId).maybeSingle();
-      const id = await notifySupportTeam(emailConfigFromEnv(), {
-        reference,
-        source: "callback-form",
-        category: TOPICS[topic],
-        reason: details || "Callback requested from the support page.",
-        userName: name,
-        userEmail: email.toLowerCase(),
-        customerId: session.customerId,
-        company: (customer?.company_name as string | undefined) ?? null,
-        preferredTime: preferredTime || null,
-        followUp,
-      });
-      console.log(JSON.stringify({ level: id === null ? "warn" : "info", msg: id === null ? "RESEND_API_KEY not set: support-team email skipped" : "support team emailed", reference, emailId: id }));
-    } catch (err) {
-      console.error(JSON.stringify({ level: "error", msg: "support-team email failed (request is still recorded)", reference, error: (err as Error).message }));
-    }
-  });
+  after(() =>
+    emailTeam(db, {
+      reference,
+      category,
+      reason: details || "Callback requested from the support page.",
+      name,
+      email,
+      customerId: session.customerId,
+      preferredTime: preferredTime || null,
+      followUp,
+      repeatContact: null,
+    }),
+  );
   return Response.json({ ok: true, reference: data.escalation_ref as string, message: followUp });
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "./lib/db";
 import { getSession } from "./lib/session";
@@ -99,6 +100,18 @@ export default async function LoginPage({ searchParams }: PageProps<"/">) {
           <div className="mt-8">
             <LoginForm />
           </div>
+
+          <div className="mt-6 flex items-center gap-3 text-xs text-muted">
+            <span className="h-px flex-1 bg-border" />
+            RelayPay staff
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <Link
+            href="/admin/login"
+            className="mt-4 flex h-11 w-full items-center justify-center rounded-md border border-border bg-surface text-sm font-medium text-text hover:border-accent hover:text-accent"
+          >
+            Sign in as admin
+          </Link>
 
           {accounts.length > 0 && (
             <details className="mt-8 rounded-lg border border-border bg-surface p-4 text-sm">

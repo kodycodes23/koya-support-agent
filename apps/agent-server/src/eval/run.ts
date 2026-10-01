@@ -124,6 +124,23 @@ async function logCounts(conversationIds: string[]) {
   };
 }
 
+/**
+ * Test cases are closed once checked, so a real call from a seed customer is never told it
+ * "already has an open case" because of an eval run. Also closes any left by earlier runs.
+ */
+async function closeEvalCases() {
+  const { data, error } = await db.from("conversations").select("id").eq("channel", "eval");
+  if (error) throw new Error(`eval conversations: ${error.message}`);
+  const ids = (data ?? []).map((c) => c.id as string);
+  for (let i = 0; i < ids.length; i += 200) {
+    const batch = ids.slice(i, i + 200);
+    for (const table of ["support_tickets", "escalations"]) {
+      const res = await db.from(table).update({ status: "closed" }).in("conversation_id", batch).neq("status", "closed");
+      if (res.error) throw new Error(`close eval ${table}: ${res.error.message}`);
+    }
+  }
+}
+
 async function main() {
   const runId = randomUUID();
   const scenarios = selected();
@@ -150,6 +167,7 @@ async function main() {
   } else {
     console.log("Partial run: docs/TESTING_EVIDENCE.md not rewritten (run without --only to regenerate).");
   }
+  await closeEvalCases().catch((err: unknown) => console.warn(`Could not close eval cases: ${(err as Error).message}`));
   process.exit(passedCount === outcomes.length ? 0 : 1);
 }
 

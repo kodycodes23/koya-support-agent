@@ -19,7 +19,7 @@ export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 export const ESCALATION_CATEGORIES = ["compliance", "account", "dispute", "payment", "other"] as const;
 export type EscalationCategory = (typeof ESCALATION_CATEGORIES)[number];
 
-export const RECORD_STATUSES = ["open", "in_progress", "closed"] as const;
+export const RECORD_STATUSES = ["open", "pending", "in_progress", "closed"] as const;
 export type RecordStatus = (typeof RECORD_STATUSES)[number];
 
 export const TOOL_CALL_STATUSES = ["success", "not_found", "error", "denied"] as const;

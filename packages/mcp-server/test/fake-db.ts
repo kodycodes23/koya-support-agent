@@ -1,6 +1,6 @@
 /**
  * Minimal in-memory stand-in for the parts of the Supabase client the tools use:
- * from(t).select/eq/ilike/limit/maybeSingle/single, insert(...).select().single(),
+ * from(t).select/eq/neq/gte/ilike/limit/maybeSingle/single, insert(...).select().single(),
  * update(...).eq(...), and rpc('search_kb_chunks_fts'). Seeded from the real CSVs and KB.
  */
 import { randomUUID } from "node:crypto";
@@ -65,6 +65,8 @@ export function createFakeDb() {
         filters.push((r) => String(r[col]).toLowerCase() === target);
         return api;
       },
+      neq: (col: string, val: unknown) => (filters.push((r) => r[col] !== val), api),
+      gte: (col: string, val: string) => (filters.push((r) => String(r[col]) >= val), api),
       limit: (n: number) => ((max = n), api),
       order: () => api,
       insert: (value: Row | Row[]) => ((op = { kind: "insert", rows: Array.isArray(value) ? value : [value] }), api),

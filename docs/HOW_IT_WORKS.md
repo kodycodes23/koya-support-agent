@@ -43,6 +43,15 @@ The MCP server runs on its own and can be deployed separately. It holds the data
 | `support_tickets` / `escalations` | Follow-ups created during calls |
 | `evaluations` | Results of the automated test scenarios |
 
+### Duplicates
+
+The same request never creates two records:
+
+- **Same call, or the callback form again within 10 minutes:** the existing ticket or escalation is returned, with no new record and no second email (logged as `duplicate_prevented`). Two identical tool calls arriving at once are queued, so they can't both slip through.
+- **A later call within 72 hours about the same open issue:** the open case is reused. Koya tells the caller "you already have a case open", a new callback time replaces the old one, and the support team gets a **Repeat contact** email (logged as `repeat_contact`). Two requests are the same issue when they share a TXN/PAY/TKT/ESC reference. Otherwise the category decides, except "other", which needs a shared reference to match across calls. A different reference, or a closed case, means a new record. The rules live in `packages/shared/src/duplicates.ts`.
+- **Vapi resending an identical turn:** the reply already given is sent again without re-running the agent (logged as `duplicate_request`).
+- Eval runs only dedupe within their own call and close their test cases afterwards, so they never collide with real customers' cases.
+
 The seed data (5 customers, 5 transactions, 3 payouts) lives in the same database. Row-level security blocks all public access, so only the servers can read or write.
 
 ## How to use it

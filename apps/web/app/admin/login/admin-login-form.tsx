@@ -1,25 +1,24 @@
 "use client";
 
 import { useActionState } from "react";
-import { login, type LoginState } from "./lib/auth-actions";
-import { PasswordField, fieldClass as field } from "./password-field";
+import { adminLogin, type AdminLoginState } from "../../lib/admin-actions";
+import { PasswordField, fieldClass } from "../../password-field";
 
-export function LoginForm() {
-  const [state, action, pending] = useActionState<LoginState, FormData>(login, {});
+export function AdminLoginForm() {
+  const [state, action, pending] = useActionState<AdminLoginState, FormData>(adminLogin, {});
   return (
     <form action={action} className="space-y-4" noValidate>
       <div>
-        <label htmlFor="identifier" className="mb-1.5 block text-sm font-medium text-text">
-          Email or first name
+        <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-text">
+          Username
         </label>
         <input
-          id="identifier"
-          name="identifier"
+          id="username"
+          name="username"
           autoComplete="username"
           required
-          defaultValue={state.identifier}
-          placeholder="amara@lagosledger.example"
-          className={field}
+          defaultValue={state.username}
+          className={fieldClass}
           aria-invalid={Boolean(state.error)}
         />
       </div>
@@ -39,7 +38,7 @@ export function LoginForm() {
         disabled={pending}
         className="h-11 w-full rounded-md bg-brand text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Signing in…" : "Sign in to admin"}
       </button>
     </form>
   );

@@ -46,6 +46,8 @@ export interface EscalationEmail {
   checks?: string[];
   /** The conversation up to the escalation (most recent last). */
   transcript?: { speaker: "Caller" | "Koya"; text: string }[];
+  /** Set when an open case is reused because the customer got in touch again about it. */
+  repeatContact?: { openedAt: Date } | null;
 }
 
 const BRAND = {
@@ -84,8 +86,17 @@ function formatDate(d: Date): string {
 export function renderEscalationEmail(e: EscalationEmail): { subject: string; html: string; text: string } {
   const category = CATEGORY_LABEL[e.category] ?? e.category;
   // Koya can book a callback during a call (an escalation with a preferred time) or escalate without one.
-  const kind =
-    e.source === "callback-form" ? "Callback request" : e.preferredTime ? "Callback booked on a Koya call" : "Escalation from a Koya call";
+  const kind = e.repeatContact
+    ? "Repeat contact"
+    : e.source === "callback-form"
+      ? "Callback request"
+      : e.preferredTime
+        ? "Callback booked on a Koya call"
+        : "Escalation from a Koya call";
+  const heading = e.repeatContact ? `${e.reference}: the customer got in touch again` : `${e.reference} needs a specialist`;
+  const intro = e.repeatContact
+    ? `${e.userName}${e.company ? ` from ${e.company}` : ""} contacted us again about this open case. No new case was created. Details are below.`
+    : `${e.userName}${e.company ? ` from ${e.company}` : ""} is waiting for a follow-up. Details are below.`;
   const when = formatDate(e.createdAt ?? new Date());
   const subject = `${e.reference} · ${kind}${e.company ? ` · ${e.company}` : ""}`;
 
@@ -96,7 +107,8 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
     ["Category", category],
     ["Preferred callback", e.preferredTime || "Not specified"],
     ["Source", e.source === "voice" ? "Voice call with Koya" : "Callback form on the support page"],
-    ["Logged", when],
+    ...(e.repeatContact ? ([["Case opened", formatDate(e.repeatContact.openedAt)]] as [string, string][]) : []),
+    [e.repeatContact ? "Contacted again" : "Logged", when],
     ...(e.conversationId ? ([["Conversation", e.conversationId]] as [string, string][]) : []),
   ];
 
@@ -137,8 +149,8 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
           <tr>
             <td style="padding:32px 32px 8px;">
               <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.accent};">[ ${escapeHtml(kind)} ]</p>
-              <h1 style="margin:10px 0 0;font-size:24px;line-height:1.25;font-weight:600;letter-spacing:-0.01em;color:${BRAND.text};">${escapeHtml(e.reference)} needs a specialist</h1>
-              <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:${BRAND.muted};">${escapeHtml(e.userName)}${e.company ? ` from ${escapeHtml(e.company)}` : ""} is waiting for a follow-up. Details are below.</p>
+              <h1 style="margin:10px 0 0;font-size:24px;line-height:1.25;font-weight:600;letter-spacing:-0.01em;color:${BRAND.text};">${escapeHtml(heading)}</h1>
+              <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:${BRAND.muted};">${escapeHtml(intro)}</p>
             </td>
           </tr>
           <tr>
@@ -146,7 +158,7 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.accentSoft};border-left:3px solid ${BRAND.accent};border-radius:6px;">
                 <tr>
                   <td style="padding:14px 16px;">
-                    <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.accent};">Reason</p>
+                    <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.accent};">${e.repeatContact ? "What they said this time" : "Reason"}</p>
                     <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:${BRAND.text};white-space:pre-wrap;">${escapeHtml(e.reason)}</p>
                   </td>
                 </tr>
@@ -222,6 +234,8 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
 
   const text = [
     `${kind}: ${e.reference}`,
+    "",
+    intro,
     "",
     `Reason: ${e.reason}`,
     "",

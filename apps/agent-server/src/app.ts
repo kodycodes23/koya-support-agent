@@ -5,6 +5,7 @@ import type { Logger } from "@koya/shared";
 import type { ConversationStore } from "./db.ts";
 import type { TurnService } from "./agent/turn-service.ts";
 import { verifyIdentityToken } from "./identity.ts";
+import { ReplayCache } from "./replay.ts";
 import { chatRequestSchema, chunk, completion, identityTokenOf, splitConversation } from "./routes/openai.ts";
 import { statusFromEndedReason, vapiServerMessageSchema } from "./routes/vapi.ts";
 
@@ -40,6 +41,7 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
   const app = new Hono();
   /** Conversations whose rejection has already been logged, so repeated turns don't flood the events table. */
   const rejectedLogged = new Set<string>();
+  const replays = new ReplayCache();
 
   /** Streams (or returns) a fixed reply without running the agent. */
   const cannedReply = (c: Context, id: string, model: string, text: string, stream: boolean) =>
@@ -113,6 +115,24 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
       return cannedReply(c, id, replyModel, SIGN_IN_REQUIRED_REPLY, body.stream !== false);
     }
 
+    // A Vapi request resent with identical messages: replay the reply instead of running the turn again.
+    const replayKey = body.call?.id ? ReplayCache.keyFor(conversation.id, body.messages) : null;
+    if (replayKey) {
+      const previousReply = replays.replyFor(replayKey);
+      const handling = previousReply ? "replayed" : replays.isRunning(replayKey) ? "superseded" : null;
+      if (handling) {
+        log.info({ conversationId: conversation.id, handling }, "duplicate chat request from Vapi");
+        void store
+          .logEvent(conversation.id, "duplicate_request", `Vapi resent the same turn; ${handling === "replayed" ? "previous reply sent again" : "running turn restarted"}`, { handling })
+          .catch((err: unknown) => log.warn({ err }, "could not log duplicate request"));
+      }
+      if (previousReply) return cannedReply(c, id, replyModel, previousReply, body.stream !== false);
+      replays.start(replayKey);
+    }
+    const remember = (turn: { status: string; reply: string } | undefined) => {
+      if (replayKey) replays.finish(replayKey, turn?.status === "ok" ? turn.reply : null);
+    };
+
     const turnInput = {
       conversationId: conversation.id,
       channel: conversation.channel,
@@ -123,7 +143,12 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
     };
 
     if (body.stream === false) {
-      const turn = await turns.handleTurn({ ...turnInput, signal: c.req.raw.signal });
+      let turn;
+      try {
+        turn = await turns.handleTurn({ ...turnInput, signal: c.req.raw.signal });
+      } finally {
+        remember(turn);
+      }
       return c.json(completion(id, replyModel, turn.reply));
     }
 
@@ -132,15 +157,20 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
       s.onAbort(() => controller.abort()); // caller hung up or Vapi cancelled (barge-in)
       let first = true;
       let writes = Promise.resolve();
-      await turns.handleTurn({
-        ...turnInput,
-        signal: controller.signal,
-        onText: (text) => {
-          const delta = first ? { role: "assistant" as const, content: text } : { content: text };
-          first = false;
-          writes = writes.then(() => s.writeSSE({ data: JSON.stringify(chunk(id, replyModel, delta)) }));
-        },
-      });
+      let turn;
+      try {
+        turn = await turns.handleTurn({
+          ...turnInput,
+          signal: controller.signal,
+          onText: (text) => {
+            const delta = first ? { role: "assistant" as const, content: text } : { content: text };
+            first = false;
+            writes = writes.then(() => s.writeSSE({ data: JSON.stringify(chunk(id, replyModel, delta)) }));
+          },
+        });
+      } finally {
+        remember(turn);
+      }
       await writes;
       if (s.aborted) return;
       await s.writeSSE({ data: JSON.stringify(chunk(id, replyModel, {}, "stop")) });

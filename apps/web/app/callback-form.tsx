@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-type State = { kind: "idle" } | { kind: "sending" } | { kind: "done"; message: string; reference: string | null } | { kind: "error"; message: string };
+type State = { kind: "idle" } | { kind: "sending" } | { kind: "done"; title: string; message: string; reference: string | null } | { kind: "error"; message: string };
 
 const field =
   "h-11 w-full rounded-md border border-border bg-surface px-3.5 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
@@ -37,9 +37,10 @@ export function CallbackForm() {
           company: form.get("company") || undefined,
         }),
       });
-      const body = (await res.json()) as { error?: string; message?: string; reference?: string | null };
+      const body = (await res.json()) as { error?: string; message?: string; reference?: string | null; duplicate?: boolean; repeat?: boolean };
       if (!res.ok) throw new Error(body.error ?? "We couldn't send your request.");
-      setState({ kind: "done", message: body.message ?? "A RelayPay specialist will be in touch.", reference: body.reference ?? null });
+      const title = body.duplicate ? "Already received" : body.repeat ? "Added to your open request" : "Request received";
+      setState({ kind: "done", title, message: body.message ?? "A RelayPay specialist will be in touch.", reference: body.reference ?? null });
     } catch (err) {
       setState({ kind: "error", message: (err as Error).message });
     }
@@ -48,7 +49,7 @@ export function CallbackForm() {
   if (state.kind === "done") {
     return (
       <div className="mx-auto max-w-xl rounded-lg border border-border bg-surface px-6 py-5 text-center" role="status">
-        <p className="text-sm font-medium text-text">Request received{state.reference ? ` · reference ${state.reference}` : ""}</p>
+        <p className="text-sm font-medium text-text">{state.title}{state.reference ? ` · reference ${state.reference}` : ""}</p>
         <p className="mt-1 text-sm text-muted">{state.message}</p>
       </div>
     );
