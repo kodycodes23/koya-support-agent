@@ -1,0 +1,13 @@
+# Keep host-built and secret files out of Docker builds (dependencies are installed inside the image).
+**/node_modules
+**/.next
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+**/*.log
+**/.DS_Store
+**/coverage
+**/.vercel
+**/*.tsbuildinfo
