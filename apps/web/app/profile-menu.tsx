@@ -6,6 +6,7 @@ import { logout } from "./lib/auth-actions";
 export interface ProfileMenuProps {
   fullName: string;
   company: string;
+  email?: string;
   /** Runs just before signing out (the Koya page ends a live call here). */
   onBeforeLogout?: () => void;
 }
@@ -20,10 +21,10 @@ const initialsOf = (name: string) =>
     .toUpperCase();
 
 /**
- * Avatar button that opens a small account menu: who is signed in, and Log out.
+ * Avatar button that opens a small account menu: who is signed in (name, company, email), and Log out.
  * Closes on Escape and on a click outside.
  */
-export function ProfileMenu({ fullName, company, onBeforeLogout }: ProfileMenuProps) {
+export function ProfileMenu({ fullName, company, email, onBeforeLogout }: ProfileMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -79,6 +80,7 @@ export function ProfileMenu({ fullName, company, onBeforeLogout }: ProfileMenuPr
           <div className="border-b border-border px-4 py-3">
             <p className="text-sm font-medium text-text">{fullName}</p>
             <p className="text-xs text-muted">{company}</p>
+            {email && <p className="mt-1 truncate text-xs text-muted" title={email}>{email}</p>}
           </div>
           <div className="py-1">
             <form action={logout} onSubmit={() => onBeforeLogout?.()}>

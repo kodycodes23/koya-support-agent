@@ -260,7 +260,7 @@ export default async function DashboardPage() {
               <span className="hidden sm:inline">Help &amp; support</span>
               <span className="sm:hidden">Help</span>
             </Link>
-            <ProfileMenu fullName={customer.contact_name} company={customer.company_name} />
+            <ProfileMenu fullName={customer.contact_name} company={customer.company_name} email={customer.contact_email} />
           </div>
         </div>
       </header>

@@ -121,12 +121,16 @@ const STEPS = [
   { n: "03", title: "Get an outcome", body: "A clear answer, a support ticket, or a callback from a specialist." },
 ];
 
-const TRY_ASKING = ["What fees does RelayPay charge?", "Check transaction TXN-9001", "What's happening with payout PAY-7002?"];
+/** Shown when the page has no customer-specific suggestions. */
+const GENERAL_SUGGESTIONS = ["What fees does RelayPay charge?", "How long do international payments take?", "Why would my account be under review?"];
 
 export interface SignedInCaller {
   firstName: string;
   fullName: string;
   company: string;
+  email: string;
+  /** "Try asking" prompts built from this customer's own payments. */
+  suggestions: string[];
 }
 
 export function SupportExperience({
@@ -185,6 +189,7 @@ export function SupportExperience({
               <ProfileMenu
                 fullName={signedIn.fullName}
                 company={signedIn.company}
+                email={signedIn.email}
                 onBeforeLogout={() => void call.stop()}
               />
             )}
@@ -281,7 +286,7 @@ export function SupportExperience({
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-[0.14em] text-on-navy-muted/80">Try asking</p>
                 <ul className="mt-3 flex flex-wrap gap-2">
-                  {TRY_ASKING.map((q) => (
+                  {(signedIn?.suggestions.length ? signedIn.suggestions : GENERAL_SUGGESTIONS).map((q) => (
                     <li key={q} className="rounded-full border border-navy-line px-3 py-1.5 text-sm text-on-navy/90">
                       &ldquo;{q}&rdquo;
                     </li>

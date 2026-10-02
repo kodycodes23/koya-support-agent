@@ -9,13 +9,31 @@ export const metadata: Metadata = {
   description: "Speak with Koya, RelayPay's voice support assistant.",
 };
 
-/** The signed-in customer, so the page can say Koya will recognise them. */
+/**
+ * The signed-in customer, so the page can greet them, plus "Try asking" prompts that use their
+ * own latest transaction and payout (never another customer's references).
+ */
 async function signedInCaller(customerId: string): Promise<SignedInCaller | null> {
   try {
-    const { data } = await db().from("customers").select("contact_name, company_name").eq("customer_id", customerId).maybeSingle();
-    return data
-      ? { firstName: String(data.contact_name).split(/\s+/)[0] ?? "", fullName: String(data.contact_name), company: String(data.company_name) }
-      : null;
+    const [customer, transaction, payout] = await Promise.all([
+      db().from("customers").select("contact_name, company_name, contact_email").eq("customer_id", customerId).maybeSingle(),
+      db().from("transactions").select("transaction_id").eq("customer_id", customerId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      db().from("payouts").select("payout_id").eq("customer_id", customerId).order("scheduled_for", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    const c = customer.data;
+    if (!c) return null;
+    const suggestions = [
+      "What fees does RelayPay charge?",
+      transaction.data ? `Check transaction ${transaction.data.transaction_id}` : "How long do international payments take?",
+      payout.data ? `What's happening with payout ${payout.data.payout_id}?` : "Why would a payment be delayed?",
+    ];
+    return {
+      firstName: String(c.contact_name).split(/\s+/)[0] ?? "",
+      fullName: String(c.contact_name),
+      company: String(c.company_name),
+      email: String(c.contact_email),
+      suggestions,
+    };
   } catch {
     return null;
   }
