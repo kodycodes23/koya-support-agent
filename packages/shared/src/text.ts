@@ -99,3 +99,19 @@ export function writtenReferences(text: string): string {
     return `${prefix}-${number}`;
   });
 }
+
+/** On-screen typing during a voice call: "[typed name] Chikodi Agorua", "[typed email] …", "[typed reference] …". */
+export type TypedField = "name" | "email" | "reference";
+const TYPED = /\[typed (name|email|reference)\]\s*([^[]+)/gi;
+
+/** Every typed value in a caller message, in order. */
+export function typedValues(text: string): { field: TypedField; value: string }[] {
+  return [...text.matchAll(TYPED)].map((m) => ({ field: m[1]!.toLowerCase() as TypedField, value: m[2]!.trim() })).filter((t) => t.value);
+}
+
+/** Which kind of value the caller typed, from its shape. */
+export function typedFieldOf(value: string): TypedField {
+  if (/@/.test(value)) return "email";
+  if (/^\s*(TXN|PAY|TKT|ESC)[-\s]?\d+/i.test(value)) return "reference";
+  return "name";
+}

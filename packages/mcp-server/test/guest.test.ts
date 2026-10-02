@@ -74,3 +74,15 @@ describe("guest callers (public website, not signed in)", () => {
     expect(await call(conversation("eval", { metadata: { guest: true } }), "lookup_transaction", { transaction_id: "TXN-9001" })).toMatchObject({ guest: true });
   });
 });
+
+describe("typed names and emails", () => {
+  it("override what speech-to-text heard when an escalation is created", async () => {
+    const convo = conversation("voice");
+    fake.tables.conversation_events!.push(
+      { id: randomUUID(), conversation_id: convo, event_type: "typed_input", metadata: { field: "name", value: "Chikodi Agorua" }, created_at: new Date(Date.now() - 2000).toISOString() },
+      { id: randomUUID(), conversation_id: convo, event_type: "typed_input", metadata: { field: "email", value: "Chikodi@Example.com" }, created_at: new Date(Date.now() - 1000).toISOString() },
+    );
+    await call(convo, "create_escalation", { user_name: "Chi Kodi a Gorua", user_email: "chi@example.com", category: "onboarding", reason: "Wants to open an account.", preferred_time: "Monday 9am" });
+    expect(fake.tables.escalations!.at(-1)).toMatchObject({ user_name: "Chikodi Agorua", user_email: "chikodi@example.com" });
+  });
+});

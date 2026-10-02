@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SpokenStream, maskSensitive, sanitizeSpoken, writtenReferences } from "../src/text.ts";
+import { SpokenStream, maskSensitive, sanitizeSpoken, writtenReferences, typedFieldOf, typedValues } from "../src/text.ts";
 
 function streamed(fragments: string[]) {
   const s = new SpokenStream();
@@ -43,5 +43,21 @@ describe("writtenReferences", () => {
   it("leaves ordinary words and other numbers alone", () => {
     expect(writtenReferences("You pay one two three times a year")).toBe("You pay one two three times a year"); // references have 4 digits
     expect(writtenReferences("Fees are shown before you confirm.")).toBe("Fees are shown before you confirm.");
+  });
+});
+
+describe("typed input during a voice call", () => {
+  it("reads every typed value from a caller message", () => {
+    expect(typedValues("My name is Chi Kodi [typed name] Chikodi Agorua")).toEqual([{ field: "name", value: "Chikodi Agorua" }]);
+    expect(typedValues("[typed email] kosi@example.com [typed reference] TXN-9001")).toEqual([
+      { field: "email", value: "kosi@example.com" },
+      { field: "reference", value: "TXN-9001" },
+    ]);
+    expect(typedValues("no typing here")).toEqual([]);
+  });
+  it("tells names, emails and references apart by shape", () => {
+    expect(typedFieldOf("Kosisochukwu Nebolisa")).toBe("name");
+    expect(typedFieldOf("kosi.nebolisa@example.com")).toBe("email");
+    expect(typedFieldOf("pay 7001")).toBe("reference");
   });
 });

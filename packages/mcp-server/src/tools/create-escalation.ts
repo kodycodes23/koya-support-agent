@@ -7,6 +7,20 @@ import { findOpenCase, serialized, spokenDate } from "../duplicates.ts";
 import { gatherContext } from "./case-context.ts";
 import { normalizeRef, verifiedCustomerFor } from "./shared.ts";
 
+/** The newest name and email the caller typed during this conversation (typed_input events). */
+async function latestTyped(ctx: ToolContext): Promise<{ name?: string; email?: string }> {
+  if (!ctx.conversationId) return {};
+  const { data } = await ctx.db.from("conversation_events").select("metadata, created_at").eq("conversation_id", ctx.conversationId).eq("event_type", "typed_input");
+  const out: { name?: string; email?: string } = {};
+  for (const e of ((data ?? []) as { metadata: { field?: string; value?: string }; created_at: string }[]).sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    const v = e.metadata?.value?.trim();
+    if (!v) continue;
+    if (e.metadata.field === "name") out.name = v.slice(0, 200);
+    if (e.metadata.field === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) out.email = v.toLowerCase();
+  }
+  return out;
+}
+
 function logEvent(ctx: ToolContext, type: string, summary: string, metadata: Record<string, unknown>) {
   inBackground(ctx.log, "conversation_events", ctx.db.from("conversation_events").insert({ conversation_id: ctx.conversationId, event_type: type, summary, metadata }));
 }
@@ -92,8 +106,10 @@ export const createEscalation = defineTool({
   handler: async (input, ctx) => {
     // Signed-in / verified callers: take contact details from their account, never from a guess.
     const verifiedId = await verifiedCustomerFor(ctx);
-    let userName = input.user_name;
-    let userEmail = input.user_email;
+    // What the caller typed on screen beats what speech-to-text heard (names, emails).
+    const typed = await latestTyped(ctx);
+    let userName = typed.name ?? input.user_name;
+    let userEmail = typed.email ?? input.user_email;
     if (verifiedId && (!userName || !userEmail)) {
       const { data, error } = await ctx.db.from("customers").select("contact_name, contact_email").eq("customer_id", verifiedId).maybeSingle();
       if (error) throw new Error(error.message);

@@ -1,4 +1,4 @@
-import type { Channel, Logger } from "@koya/shared";
+import { typedValues, type Channel, type Logger } from "@koya/shared";
 import type { ConversationStore } from "../db.ts";
 import { OUT_OF_SCOPE_NOTE } from "./answer-type.ts";
 import { WarmPool, runAgentTurn, type AgentConfig, type TurnResult } from "./run-turn.ts";
@@ -56,6 +56,12 @@ export class TurnService {
     onText?: (text: string) => void;
   }): Promise<TurnResult> {
     const { conversationId } = input;
+    // Values the caller typed on screen are recorded first, so tools can use their exact spelling.
+    for (const typed of typedValues(input.userText)) {
+      await this.store
+        .logEvent(conversationId, "typed_input", `Caller typed their ${typed.field}`, typed)
+        .catch((err: unknown) => this.log.warn({ err, conversationId }, "could not record typed input"));
+    }
     const previous = this.inFlight.get(conversationId);
     if (previous) {
       this.log.info({ conversationId }, "caller interrupted; cancelling the in-flight turn");

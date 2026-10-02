@@ -20,3 +20,10 @@ export function writtenReferences(text: string): string {
     return `${prefix}-${number}`;
   });
 }
+
+/** What the caller typed during a voice call, by shape. Mirrors typedFieldOf() in packages/shared/src/text.ts. */
+export function typedFieldOf(value: string): "name" | "email" | "reference" {
+  if (/@/.test(value)) return "email";
+  if (/^\s*(TXN|PAY|TKT|ESC)[-\s]?\d+/i.test(value)) return "reference";
+  return "name";
+}

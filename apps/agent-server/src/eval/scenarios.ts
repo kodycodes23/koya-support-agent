@@ -429,6 +429,48 @@ export const SCENARIOS: Scenario[] = [
       ),
     ],
   },
+  {
+    id: "20",
+    name: "Guest: typed name and email are used exactly",
+    prdArea: "Guest Access",
+    guest: true,
+    turns: [
+      "Hi, I'd like to open a RelayPay account for my business.",
+      "Yes please.",
+      "[typed name] Kosisochukwu Nebolisa",
+      "[typed email] kosi.nebolisa@example.com",
+      "Friday at 10am.",
+    ],
+    expected: [
+      "Offer the onboarding team and collect name, email and callback time, mentioning the caller can type them.",
+      "Use the typed name and email exactly, without asking to spell them or saying them back.",
+      "Create an onboarding escalation with them.",
+    ],
+    checks: [
+      says("offers typing for the name or email", /type it/i),
+      neverSays("does not ask to spell what was typed", /spell (it|that|your)/i),
+      recordCreated("escalations", (r) => r.user_name === "Kosisochukwu Nebolisa" && r.user_email === "kosi.nebolisa@example.com", " (typed name and email, exactly)"),
+    ],
+  },
+  {
+    id: "21",
+    name: "Typed correction replaces a misheard name",
+    prdArea: "Guest Access",
+    guest: true,
+    turns: [
+      "I want to open an account for my company.",
+      "Yes, please have them call me.",
+      "My name is Chi Kodi a Gorua.",
+      "[typed name] Chikodi Agorua",
+      "My email is chikodi@example.com.",
+      "Monday at 9am.",
+    ],
+    expected: ["Use the typed name in place of the misheard one for the onboarding escalation."],
+    checks: [
+      usedTool("create_escalation"),
+      recordCreated("escalations", (r) => r.user_name === "Chikodi Agorua", " (with the typed name)"),
+    ],
+  },
 ];
 
 /** Scenario 9 needs a real microphone and Vapi; it is recorded manually. */

@@ -3,6 +3,7 @@
 import Vapi from "@vapi-ai/web";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCallIdentityToken } from "./lib/call-identity";
+import { typedFieldOf } from "./references";
 
 export type CallStatus = "idle" | "connecting" | "listening" | "speaking" | "ending" | "ended" | "error";
 
@@ -11,6 +12,8 @@ export interface TranscriptLine {
   role: "user" | "assistant";
   text: string;
   final: boolean;
+  /** Typed on screen during the call (shown as typed, not transcribed). */
+  typed?: boolean;
   /** Text of this line's already-finished chunks (internal, for joining chunks). */
   settled?: string;
 }
@@ -159,6 +162,17 @@ export function useVapiCall(firstName?: string | null) {
     vapiRef.current?.send({ type: "add-message", message: { role: "system", content: `[koya-identity:${token}]` }, triggerResponseEnabled: true });
   }, []);
 
+  /**
+   * Speech-to-text often gets names (and emails) wrong. The caller can type them instead: the text
+   * goes into the call as their own message, labelled with what it is, and Koya replies to it.
+   */
+  const sendTyped = useCallback((text: string) => {
+    const value = text.trim();
+    if (!value || !vapiRef.current) return;
+    vapiRef.current.send({ type: "add-message", message: { role: "user", content: `[typed ${typedFieldOf(value)}] ${value}` }, triggerResponseEnabled: true });
+    setLines((prev) => [...prev, { id: nextId.current++, role: "user", text: value, final: true, typed: true }]);
+  }, []);
+
   const toggleMute = useCallback(() => {
     const vapi = vapiRef.current;
     if (!vapi) return;
@@ -166,5 +180,5 @@ export function useVapiCall(firstName?: string | null) {
     setMuted(!muted);
   }, [muted]);
 
-  return { configured, status, inCall, muted, lines, error, volume, micVolume, callId, start, stop, toggle, toggleMute, sendIdentity };
+  return { configured, status, inCall, muted, lines, error, volume, micVolume, callId, start, stop, toggle, toggleMute, sendIdentity, sendTyped };
 }

@@ -8,6 +8,7 @@ import { CallbackForm } from "./callback-form";
 import { ChatPanel } from "./chat-panel";
 import { getCallIdentityToken } from "./lib/call-identity";
 import { SignInModal } from "./sign-in-modal";
+import { TypeInstead } from "./type-instead";
 import { useKoyaChat } from "./use-koya-chat";
 import { IdleTimeout } from "./idle-timeout";
 import { ProfileMenu } from "./profile-menu";
@@ -194,6 +195,9 @@ export function SupportExperience({
   const inCall = preview ? true : call.inCall;
   const status = preview ?? call.status;
   const showTranscript = call.inCall || call.lines.length > 0;
+  // Koya just asked for a name, email or reference: highlight the type-it-instead box.
+  const lastKoyaLine = [...call.lines].reverse().find((l) => l.role === "assistant")?.text ?? "";
+  const koyaAskedForDetails = /\b(your name|full name|email|spell|reference|type it)\b/i.test(lastKoyaLine);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -366,6 +370,10 @@ export function SupportExperience({
                       {call.error}
                     </p>
                   )}
+                  {/* `inCall` also covers the dev-only orb preview, so the box can be checked without a call. */}
+                  {inCall && call.status !== "connecting" && (
+                    <TypeInstead onSend={call.sendTyped} prompted={koyaAskedForDetails} />
+                  )}
                 </>
               ) : (
                 <p className="mt-8 max-w-md text-sm text-on-navy-muted">
@@ -450,6 +458,7 @@ export function SupportExperience({
                       </dt>
                       <dd className={`text-sm leading-6 ${line.final ? "text-text" : "text-muted"}`}>
                         {line.role === "assistant" ? writtenReferences(line.text) : line.text}
+                        {line.typed && <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">typed</span>}
                       </dd>
                     </div>
                   ))}
