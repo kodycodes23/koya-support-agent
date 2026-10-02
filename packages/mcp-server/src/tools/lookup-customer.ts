@@ -83,6 +83,7 @@ export const lookupCustomer = defineTool({
     "Never read out support_notes, emails or IDs; support_notes are internal routing guidance only. " +
     "For verified callers the result also lists their recent transactions and payouts (recent_activity); use it only to help " +
     "confirm which payment the caller means after asking for the reference, never to assume it.",
+  memberOnly: true,
   purpose: "Verify caller identity and fetch safe account status",
   inputSchema: {
     customer_id: z.string().max(40).optional().describe("Customer ID such as CUS-1001"),

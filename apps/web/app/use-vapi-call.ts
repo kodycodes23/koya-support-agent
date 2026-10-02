@@ -62,6 +62,8 @@ export function useVapiCall(firstName?: string | null) {
   const [muted, setMuted] = useState(false);
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** Vapi's id for the live call (used to ask the server whether Koya wants the caller to sign in). */
+  const [callId, setCallId] = useState<string | null>(null);
   const configured = Boolean(PUBLIC_KEY && ASSISTANT_ID);
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export function useVapiCall(firstName?: string | null) {
     vapi.on("call-end", () => {
       setStatus((s) => (s === "error" ? s : "ended"));
       setMuted(false);
+      setCallId(null);
       volume.current = 0;
       micVolume.current = 0;
     });
@@ -132,6 +135,8 @@ export function useVapiCall(firstName?: string | null) {
       if (!call) {
         setStatus("error");
         setError("The call could not be started. Please try again.");
+      } else {
+        setCallId(call.id ?? null);
       }
     } catch (e) {
       setStatus("error");
@@ -146,6 +151,14 @@ export function useVapiCall(firstName?: string | null) {
 
   const toggle = useCallback(() => (inCall ? stop() : start()), [inCall, start, stop]);
 
+  /**
+   * The caller signed in partway through the call: hand Koya their signed token as a system
+   * message and let it reply straight away ("Welcome back, …"). The server verifies the token.
+   */
+  const sendIdentity = useCallback((token: string) => {
+    vapiRef.current?.send({ type: "add-message", message: { role: "system", content: `[koya-identity:${token}]` }, triggerResponseEnabled: true });
+  }, []);
+
   const toggleMute = useCallback(() => {
     const vapi = vapiRef.current;
     if (!vapi) return;
@@ -153,5 +166,5 @@ export function useVapiCall(firstName?: string | null) {
     setMuted(!muted);
   }, [muted]);
 
-  return { configured, status, inCall, muted, lines, error, volume, micVolume, start, stop, toggle, toggleMute };
+  return { configured, status, inCall, muted, lines, error, volume, micVolume, callId, start, stop, toggle, toggleMute, sendIdentity };
 }

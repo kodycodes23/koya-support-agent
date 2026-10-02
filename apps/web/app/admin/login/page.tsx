@@ -15,7 +15,7 @@ export default async function AdminLoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="flex items-center px-4 py-5 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="RelayPay sign in">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="RelayPay home">
           <Image src="/relaypay-mark.svg" alt="" width={28} height={28} priority />
           <Image src="/relaypay-wordmark.svg" alt="RelayPay" width={98} height={13} priority />
         </Link>
@@ -31,7 +31,7 @@ export default async function AdminLoginPage() {
             <AdminLoginForm />
           </div>
           <p className="mt-6 text-center text-sm text-muted">
-            <Link href="/" className="font-medium text-accent hover:underline">
+            <Link href="/signin" className="font-medium text-accent hover:underline">
               Back to customer sign in
             </Link>
           </p>

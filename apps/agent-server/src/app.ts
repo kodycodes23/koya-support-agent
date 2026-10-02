@@ -6,7 +6,9 @@ import type { ConversationStore } from "./db.ts";
 import type { TurnService } from "./agent/turn-service.ts";
 import { verifyIdentityToken } from "./identity.ts";
 import { ReplayCache } from "./replay.ts";
-import { chatRequestSchema, chunk, completion, identityTokenOf, splitConversation } from "./routes/openai.ts";
+import { GUEST_BRIEFING, signedInHandoff } from "./agent/prompt.ts";
+import { CHAT_KEY_PREFIX } from "./db.ts";
+import { chatRequestSchema, chatSessionIdOf, chunk, completion, identityTokenOf, splitConversation } from "./routes/openai.ts";
 import { statusFromEndedReason, vapiServerMessageSchema } from "./routes/vapi.ts";
 
 export interface AppDeps {
@@ -26,6 +28,9 @@ function safeEqual(a: string, b: string) {
   const bb = Buffer.from(b);
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
+
+/** Extra fields for the website chat window, after a turn. */
+const koyaSignals = (turn: { toolsUsed: string[] }) => ({ signInRequested: turn.toolsUsed.includes("request_sign_in") });
 
 function bearer(c: Context) {
   const h = c.req.header("authorization") ?? "";
@@ -69,28 +74,51 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
       return c.json({ error: { message: "Invalid chat completion request", type: "invalid_request_error" } }, 400);
     }
     const body = parsed.data;
-    const { userText, transcript } = splitConversation(body.messages);
+    const split = splitConversation(body.messages);
+    let userText = split.userText;
+    const transcript = split.transcript;
     const id = `chatcmpl-${randomUUID()}`;
     const replyModel = body.model ?? model;
 
+    // Vapi call → voice conversation; the website chat window → chat conversation; anything else → text.
+    const chatSessionId = chatSessionIdOf(body);
     const conversation = body.call?.id
       ? await store.forVapiCall({ callId: body.call.id, callerId: body.call.customer?.number ?? null })
-      : await store.create({ channel: "text", metadata: { source: "chat-completions" } });
+      : chatSessionId
+        ? await store.forVapiCall({ callId: `${CHAT_KEY_PREFIX}${chatSessionId}`, channel: "chat", metadata: { source: "web-chat" } })
+        : await store.create({ channel: "text", metadata: { source: "chat-completions" } });
+    const isChat = conversation.channel === "chat" || conversation.metadata?.source === "web-chat";
 
-    if (!userText) return cannedReply(c, id, replyModel, NO_INPUT_REPLY, body.stream !== false);
-
-    // Signed-in caller: verify the web app's token once per conversation and brief the agent.
+    // Signed-in caller: verify the web app's token once per conversation and brief the agent. A guest
+    // who signs in partway through gets a welcome back and an answer to what they asked before.
     let callerContext: string | undefined;
+    let signedInNow = false;
     if (!conversation.verified_customer_id) {
       const customerId = await verifyIdentityToken(identityTokenOf(body), identitySecret);
       if (customerId) {
-        callerContext = (await store.markSignedIn(conversation, customerId).catch((err: unknown) => {
+        try {
+          const hadTurns = await store.hasTurns(conversation.id);
+          const signedIn = await store.markSignedIn(conversation, customerId);
+          if (signedIn) {
+            callerContext = signedIn.briefing;
+            if (hadTurns) {
+              signedInNow = true;
+              callerContext += ` ${signedInHandoff(signedIn.firstName, await store.pendingSignInQuestion(conversation.id))}`;
+            }
+            log.info({ conversationId: conversation.id, customerId, midConversation: signedInNow }, "signed-in caller verified by token");
+          }
+        } catch (err) {
           log.warn({ err, conversationId: conversation.id }, "could not apply signed-in identity");
-          return null;
-        })) ?? undefined;
-        if (callerContext) log.info({ conversationId: conversation.id, customerId }, "signed-in caller verified by token");
+        }
       }
     }
+    // Signing in mid-conversation triggers a turn with nothing new from the caller: Koya continues.
+    if (!userText && signedInNow) userText = "I've signed in now.";
+    if (!userText) return cannedReply(c, id, replyModel, NO_INPUT_REPLY, body.stream !== false);
+
+    // Guests (public website, not signed in) get general help only; the MCP tools enforce it too.
+    const guest = !conversation.verified_customer_id && (conversation.channel === "voice" || isChat);
+    if (guest) callerContext = GUEST_BRIEFING;
 
     // Voice calls are for signed-in customers only: without a verified identity the agent never runs.
     if (requireSignedIn && body.call?.id && !conversation.verified_customer_id) {
@@ -135,7 +163,7 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
 
     const turnInput = {
       conversationId: conversation.id,
-      channel: conversation.channel,
+      channel: isChat ? ("chat" as const) : conversation.channel, // written replies for the chat window
       userText,
       resumeSessionId: conversation.agent_session_id,
       historyTranscript: transcript,
@@ -149,7 +177,7 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
       } finally {
         remember(turn);
       }
-      return c.json(completion(id, replyModel, turn.reply));
+      return c.json({ ...completion(id, replyModel, turn.reply), ...(isChat ? { koya: koyaSignals(turn) } : {}) });
     }
 
     return streamSSE(c, async (s) => {
@@ -173,7 +201,8 @@ export function createApp({ store, turns, log, model, llmSecret, webhookSecret, 
       }
       await writes;
       if (s.aborted) return;
-      await s.writeSSE({ data: JSON.stringify(chunk(id, replyModel, {}, "stop")) });
+      // The chat window reads `koya` off the last chunk (e.g. to open the sign-in window); Vapi gets plain OpenAI chunks.
+      await s.writeSSE({ data: JSON.stringify({ ...chunk(id, replyModel, {}, "stop"), ...(isChat && turn ? { koya: koyaSignals(turn) } : {}) }) });
       await s.writeSSE({ data: "[DONE]" });
     });
   };

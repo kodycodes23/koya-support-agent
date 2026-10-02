@@ -31,7 +31,7 @@ describe("ReplayCache", () => {
 
 describe("resent Vapi requests", () => {
   it("are answered from the previous reply without running the agent again", async () => {
-    const convo: ConversationRecord = { id: "c1", channel: "voice", vapi_call_id: "call-1", agent_session_id: null, verified_customer_id: "CUS-1001", final_status: "active", ended_at: null };
+    const convo: ConversationRecord = { id: "c1", channel: "voice", vapi_call_id: "call-1", agent_session_id: null, verified_customer_id: "CUS-1001", final_status: "active", ended_at: null, metadata: null };
     const store = { forVapiCall: vi.fn(async () => convo), logEvent: vi.fn(async () => undefined) } as unknown as ConversationStore;
     const handleTurn = vi.fn(async () => ({ reply: "Your payout is processing.", status: "ok" }));
     const app = createApp({ store, turns: { handleTurn } as unknown as TurnService, log: createLogger("test", "silent"), model: "m" });

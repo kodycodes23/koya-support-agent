@@ -17,6 +17,7 @@ export const KOYA_TOOLS = [
   "lookup_payout",
   "create_support_ticket",
   "create_escalation",
+  "request_sign_in",
   "log_conversation_event",
 ] as const;
 /** The subset the voice agent may call. log_conversation_event stays available to other MCP clients. */

@@ -6,7 +6,7 @@ export type AnswerType = (typeof ANSWER_TYPES)[number];
 export const CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
 export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 
-export const CHANNELS = ["voice", "text", "eval"] as const;
+export const CHANNELS = ["voice", "chat", "text", "eval"] as const;
 export type Channel = (typeof CHANNELS)[number];
 
 export const TICKET_CATEGORIES = ["payment", "payout", "invoice", "account", "compliance", "technical", "other"] as const;
@@ -16,7 +16,7 @@ export const TICKET_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
 /** From escalation-rules.md. Refunds/cancellations map to `dispute` or `payment`. */
-export const ESCALATION_CATEGORIES = ["compliance", "account", "dispute", "payment", "other"] as const;
+export const ESCALATION_CATEGORIES = ["compliance", "account", "dispute", "payment", "onboarding", "other"] as const;
 export type EscalationCategory = (typeof ESCALATION_CATEGORIES)[number];
 
 export const RECORD_STATUSES = ["open", "pending", "in_progress", "closed"] as const;

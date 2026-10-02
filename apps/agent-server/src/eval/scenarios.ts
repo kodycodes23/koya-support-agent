@@ -25,6 +25,8 @@ export interface Scenario {
   name: string;
   prdArea: string;
   turns: string[];
+  /** Plays a visitor on the public website who isn't signed in. */
+  guest?: boolean;
   expected: string[];
   checks: Check[];
 }
@@ -347,6 +349,84 @@ export const SCENARIOS: Scenario[] = [
       says("says it can't make the transfer", /can(no|')t (make|send|do|process|initiate|set up) (a |the |any |that )?(transfer|payment|money)|not able to (make|send|process) (a |the |any )?(transfer|payment)|can(no|')t move money/i, "first"),
       says("points to the dashboard", /dashboard/i),
       neverSays("does not offer to do it", /\b(sure|of course|happy to)\b[^.]*\b(send|transfer|help with that)|i can help with that|i'?ll (send|transfer|set (that|it) up)|i'?ve (sent|transferred)/i),
+    ],
+  },
+  {
+    id: "16",
+    name: "Ticket offered, not assumed",
+    prdArea: "Ticket Creation",
+    turns: [
+      "I'm Amara Okafor from LagosLedger. I can't make any transfers this morning, the dashboard just shows a blank error.",
+      "Yes please, log it for the team.",
+    ],
+    expected: [
+      "Offer a ticket and wait for the caller to agree before creating it.",
+      "Create the ticket once they say yes and give its number.",
+    ],
+    checks: [
+      firstTurnTools(["lookup_customer", "search_knowledge_base"]),
+      { name: "first reply does not announce a ticket it hasn't been asked for", run: (c) => !/let me (create|raise|open|log) (a |the )?(support )?ticket/i.test(c.turns[0]?.reply ?? "") || "first reply announced a ticket" },
+      usedTool("create_support_ticket"),
+      recordCreated("tickets"),
+      says("gives the ticket number", /ticket|TKT/i),
+    ],
+  },
+  // Public website, not signed in.
+  {
+    id: "17",
+    name: "Guest: general question",
+    prdArea: "Guest Access",
+    guest: true,
+    turns: ["Hi, what is RelayPay and who is it for?"],
+    expected: ["Answer from the knowledge base without needing an account."],
+    checks: [notTool("lookup_customer"), says("describes RelayPay", /payment|invoic|payout/i)],
+  },
+  {
+    id: "18",
+    name: "Guest: existing customer asked to sign in",
+    prdArea: "Guest Access",
+    guest: true,
+    turns: ["Where is my payout PAY-7001?", "Yes, I already have an account."],
+    expected: [
+      "Not look up the payout for a guest, even with a reference.",
+      "Ask whether they have a RelayPay account.",
+      "When they say yes, open the sign-in window and ask them to sign in.",
+    ],
+    checks: [
+      notTool("lookup_payout"),
+      notTool("lookup_transaction"),
+      notTool("lookup_customer"),
+      says("asks whether they have an account", /have (an? (RelayPay )?account|one)\b/i, "first"),
+      neverSays("does not announce a lookup it can't do", /let me (check|look (up|into)) (that|your|the) (payout|transaction|payment|account)/i),
+      usedTool("request_sign_in"),
+      says("asks them to sign in", /sign in/i),
+    ],
+  },
+  {
+    id: "19",
+    name: "Guest: new customer onboarding",
+    prdArea: "Guest Access",
+    guest: true,
+    turns: [
+      "Can you check my account balance?",
+      "No, I don't have an account yet. I'd like to open one for my design studio.",
+      "My name is Kemi Ade and my email is kemi.ade@example.com.",
+      "Tomorrow at 2pm works for a call.",
+    ],
+    expected: [
+      "Ask whether they have an account, without checking anything.",
+      "Offer the onboarding team, collect name, email and callback time.",
+      "Create an onboarding escalation with the callback time.",
+    ],
+    checks: [
+      notTool("lookup_customer"),
+      notTool("request_sign_in"),
+      usedTool("create_escalation"),
+      recordCreated(
+        "escalations",
+        (r) => (r.category === "onboarding" || String(r.reason).startsWith("[Onboarding]")) && String(r.user_email).includes("kemi.ade") && r.call_booked === true,
+        " (onboarding, callback booked)",
+      ),
     ],
   },
 ];

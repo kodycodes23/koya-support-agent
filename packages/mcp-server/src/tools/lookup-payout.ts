@@ -10,6 +10,7 @@ export const lookupPayout = defineTool({
     "Get the real status of a payout by payout reference (e.g. PAY-7002) or its linked transaction reference. " +
     "Never guess a status or promise a date. Recipient and amount are only returned for verified account owners. " +
     "If escalation_recommended is true (for example a compliance review), escalate to a specialist and do not explain internal compliance decisions.",
+  memberOnly: true,
   purpose: "Report the real status of a payout",
   inputSchema: {
     payout_id: z.string().max(40).optional().describe("Payout reference such as PAY-7002"),

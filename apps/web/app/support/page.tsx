@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { db } from "../lib/db";
 import { getSession, IDLE_TIMEOUT_SECONDS } from "../lib/session";
 import { SupportExperience, type SignedInCaller } from "../support-experience";
@@ -40,8 +39,7 @@ async function signedInCaller(customerId: string): Promise<SignedInCaller | null
 }
 
 export default async function SupportPage() {
-  // Koya is only available to signed-in customers.
+  // Open to everyone: guests get general help; signed-in customers get help with their own account.
   const session = await getSession();
-  if (!session) redirect("/");
-  return <SupportExperience signedIn={await signedInCaller(session.customerId)} idleTimeoutSeconds={IDLE_TIMEOUT_SECONDS} />;
+  return <SupportExperience signedIn={session ? await signedInCaller(session.customerId) : null} idleTimeoutSeconds={IDLE_TIMEOUT_SECONDS} />;
 }

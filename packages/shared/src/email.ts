@@ -48,6 +48,10 @@ export interface EscalationEmail {
   transcript?: { speaker: "Caller" | "Koya"; text: string }[];
   /** Set when an open case is reused because the customer got in touch again about it. */
   repeatContact?: { openedAt: Date } | null;
+  /** "ticket" for a support ticket (follow-up work, no callback); default "escalation". */
+  caseType?: "escalation" | "ticket";
+  /** Ticket priority (low, medium, high, urgent). */
+  priority?: string | null;
 }
 
 const BRAND = {
@@ -67,6 +71,10 @@ const CATEGORY_LABEL: Record<string, string> = {
   account: "Account",
   dispute: "Dispute",
   payment: "Payment",
+  payout: "Payout",
+  invoice: "Invoice",
+  technical: "Technical",
+  onboarding: "Onboarding (new customer)",
   other: "Other",
 };
 
@@ -82,30 +90,43 @@ function formatDate(d: Date): string {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(d) + " UTC";
 }
 
-/** Subject, HTML and plain-text bodies for a new escalation or callback request. */
+/** Subject, HTML and plain-text bodies for a new escalation, callback request or support ticket. */
 export function renderEscalationEmail(e: EscalationEmail): { subject: string; html: string; text: string } {
   const category = CATEGORY_LABEL[e.category] ?? e.category;
+  const ticket = e.caseType === "ticket";
+  const priority = e.priority ? e.priority.charAt(0).toUpperCase() + e.priority.slice(1) : null;
   // Koya can book a callback during a call (an escalation with a preferred time) or escalate without one.
   const kind = e.repeatContact
     ? "Repeat contact"
-    : e.source === "callback-form"
-      ? "Callback request"
-      : e.preferredTime
-        ? "Callback booked on a Koya call"
-        : "Escalation from a Koya call";
-  const heading = e.repeatContact ? `${e.reference}: the customer got in touch again` : `${e.reference} needs a specialist`;
+    : ticket
+      ? `Support ticket${priority ? ` (${priority} priority)` : ""}`
+      : e.source === "callback-form"
+        ? "Callback request"
+        : e.preferredTime
+          ? "Callback booked on a Koya call"
+          : "Escalation from a Koya call";
+  const who = `${e.userName || "A caller"}${e.company ? ` from ${e.company}` : ""}`;
+  const heading = e.repeatContact
+    ? `${e.reference}: the customer got in touch again`
+    : ticket
+      ? `${e.reference} needs follow-up`
+      : `${e.reference} needs a specialist`;
   const intro = e.repeatContact
-    ? `${e.userName}${e.company ? ` from ${e.company}` : ""} contacted us again about this open case. No new case was created. Details are below.`
-    : `${e.userName}${e.company ? ` from ${e.company}` : ""} is waiting for a follow-up. Details are below.`;
+    ? `${who} contacted us again about this open case. No new case was created. Details are below.`
+    : ticket
+      ? `${who} reported an issue on a Koya call that needs follow-up from the support team. Details are below.`
+      : `${who} is waiting for a follow-up. Details are below.`;
+  const summaryLabel = e.repeatContact ? "What they said this time" : ticket ? "Summary" : "Reason";
   const when = formatDate(e.createdAt ?? new Date());
   const subject = `${e.reference} · ${kind}${e.company ? ` · ${e.company}` : ""}`;
 
   const rows: [string, string][] = [
-    ["Customer", [e.userName, e.company].filter(Boolean).join(" · ")],
-    ["Email", e.userEmail],
+    ["Customer", [e.userName, e.company].filter(Boolean).join(" · ") || "Not identified on the call"],
+    ...(e.userEmail ? ([["Email", e.userEmail]] as [string, string][]) : []),
     ...(e.customerId ? ([["Customer ID", e.customerId]] as [string, string][]) : []),
     ["Category", category],
-    ["Preferred callback", e.preferredTime || "Not specified"],
+    ...(priority ? ([["Priority", priority]] as [string, string][]) : []),
+    ...(ticket ? [] : ([["Preferred callback", e.preferredTime || "Not specified"]] as [string, string][])),
     ["Source", e.source === "voice" ? "Voice call with Koya" : "Callback form on the support page"],
     ...(e.repeatContact ? ([["Case opened", formatDate(e.repeatContact.openedAt)]] as [string, string][]) : []),
     [e.repeatContact ? "Contacted again" : "Logged", when],
@@ -158,7 +179,7 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.accentSoft};border-left:3px solid ${BRAND.accent};border-radius:6px;">
                 <tr>
                   <td style="padding:14px 16px;">
-                    <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.accent};">${e.repeatContact ? "What they said this time" : "Reason"}</p>
+                    <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.accent};">${summaryLabel}</p>
                     <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:${BRAND.text};white-space:pre-wrap;">${escapeHtml(e.reason)}</p>
                   </td>
                 </tr>
@@ -221,7 +242,7 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
           }
           <tr>
             <td style="padding:28px 32px 32px;">
-              <p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND.muted};">Sent automatically by Koya, RelayPay's voice support assistant. Reply to the customer directly at <span style="color:${BRAND.text};">${escapeHtml(e.userEmail)}</span>. Don't forward this email outside the support team.</p>
+              <p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND.muted};">Sent automatically by Koya, RelayPay's voice support assistant.${e.userEmail ? ` Reply to the customer directly at <span style="color:${BRAND.text};">${escapeHtml(e.userEmail)}</span>.` : ""} Don't forward this email outside the support team.</p>
             </td>
           </tr>
         </table>
@@ -237,7 +258,7 @@ export function renderEscalationEmail(e: EscalationEmail): { subject: string; ht
     "",
     intro,
     "",
-    `Reason: ${e.reason}`,
+    `${summaryLabel}: ${e.reason}`,
     "",
     ...rows.map(([label, value]) => `${label}: ${value}`),
     ...(e.account ? ["", `Account: ${e.account.plan} plan · account ${e.account.status} · verification ${e.account.kyc}`] : []),
@@ -271,8 +292,8 @@ export async function sendEmail(config: EmailConfig, msg: { subject: string; htm
   return body.id ?? "";
 }
 
-/** Renders and sends the support-team notification for an escalation. */
+/** Renders and sends the support-team notification for an escalation or ticket. */
 export async function notifySupportTeam(config: EmailConfig | null, e: EscalationEmail): Promise<string | null> {
   if (!config) return null;
-  return sendEmail(config, { ...renderEscalationEmail(e), replyTo: e.userEmail });
+  return sendEmail(config, { ...renderEscalationEmail(e), ...(e.userEmail ? { replyTo: e.userEmail } : {}) });
 }

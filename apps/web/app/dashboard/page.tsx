@@ -194,9 +194,9 @@ const KYC_LABEL: Record<string, string> = { approved: "KYC verified", pending: "
 
 export default async function DashboardPage() {
   const session = await getSession();
-  if (!session) redirect("/");
+  if (!session) redirect("/signin");
   const overview = await getCustomerOverview(session.customerId);
-  if (!overview) redirect("/");
+  if (!overview) redirect("/signin");
   const { customer, transactions, payouts } = overview;
 
   const firstName = firstNameOf(customer);

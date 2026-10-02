@@ -3,6 +3,7 @@ import { summarize, type ToolCallStatus } from "@koya/shared";
 import { z } from "zod";
 import { inBackground } from "./background.ts";
 import type { ToolContext } from "./context.ts";
+import { GUEST_NEXT_STEP, isGuest } from "./tools/shared.ts";
 
 export interface ToolOutcome {
   status: ToolCallStatus;
@@ -18,6 +19,8 @@ export interface ToolDefinition<Shape extends z.ZodRawShape> {
   /** Why the tool exists — stored on every tool_call_logs row. */
   purpose: string;
   inputSchema: Shape;
+  /** Account tools: refused for guests (public-site callers who aren't signed in), whatever the model tries. */
+  memberOnly?: boolean;
   handler: (input: z.infer<z.ZodObject<Shape>>, ctx: ToolContext) => Promise<ToolOutcome>;
 }
 
@@ -62,7 +65,10 @@ export async function runTool<Shape extends z.ZodRawShape>(
   let outcome: ToolOutcome;
   let errorMessage: string | null = null;
   try {
-    outcome = await def.handler(args, ctx);
+    outcome =
+      def.memberOnly && (await isGuest(ctx))
+        ? { status: "denied", result: { ok: false, guest: true, next_step: GUEST_NEXT_STEP }, summary: "refused: guest caller (not signed in)" }
+        : await def.handler(args, ctx);
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : String(err);
     log.error({ err }, "tool failed");

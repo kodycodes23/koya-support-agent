@@ -52,7 +52,7 @@ const calls: [string, Record<string, unknown>][] = [
   ["lookup_transaction", { transaction_id: "TXN-0000" }],
   ["lookup_payout", { payout_id: "PAY-7002" }],
   ["lookup_payout", { transaction_id: "TXN-9004" }],
-  ["create_support_ticket", { category: "invoice", priority: "medium", summary: "[smoke] Invoice payment failed and needs review.", customer_id: "CUS-1001" }],
+  ["create_support_ticket", { caller_agreement: "yes please", category: "invoice", priority: "medium", summary: "[smoke] Invoice payment failed and needs review.", customer_id: "CUS-1001" }],
   ["create_escalation", { user_name: "Smoke Test", user_email: "smoke@example.com", category: "account", reason: "[smoke] Account restricted.", preferred_time: "tomorrow 10am" }],
   ["log_conversation_event", { event_type: "smoke_test", summary: "MCP smoke test ran" }],
 ];

@@ -13,6 +13,7 @@ export const lookupTransaction = defineTool({
     "Share the customer-safe support_summary; do not promise arrival beyond estimated_arrival. " +
     "Amount and currency are only returned when the caller is verified as the account owner. " +
     "If escalation_recommended is true, offer a specialist instead of troubleshooting.",
+  memberOnly: true,
   purpose: "Report the real status of a customer-referenced transaction",
   inputSchema: {
     transaction_id: z.string().min(3).max(40).describe("Transaction reference such as TXN-9001"),

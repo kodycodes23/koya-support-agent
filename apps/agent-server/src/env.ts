@@ -21,7 +21,7 @@ export const env = parseEnv(
     KOYA_IDENTITY_SECRET: optionalString,
     // Voice calls must come from a customer signed in to the dashboard (valid identity token).
     // "false" allows anonymous callers, who then verify by voice.
-    REQUIRE_SIGNED_IN_CALLER: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+    REQUIRE_SIGNED_IN_CALLER: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
     VAPI_WEBHOOK_SECRET: optionalString,
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     LOG_LEVEL: logLevelSchema,

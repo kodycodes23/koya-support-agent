@@ -46,3 +46,35 @@ describe("emailConfigFromEnv", () => {
     });
   });
 });
+
+describe("ticket emails", () => {
+  const ticket = {
+    reference: "TKT-1046",
+    source: "voice" as const,
+    caseType: "ticket" as const,
+    priority: "medium",
+    category: "technical",
+    reason: "Dashboard shows a blank error when Amara tries to make any transfer.",
+    userName: "Amara Okafor",
+    userEmail: "amara@lagosledger.example",
+    company: "LagosLedger",
+  };
+
+  it("labels the ticket, its priority and summary, with no callback row", () => {
+    const { subject, html, text } = renderEscalationEmail(ticket);
+    expect(subject).toBe("TKT-1046 · Support ticket (Medium priority) · LagosLedger");
+    expect(html).toContain("TKT-1046 needs follow-up");
+    expect(text).toContain("Summary: Dashboard shows a blank error");
+    expect(text).toContain("Priority: Medium");
+    expect(text).toContain("Category: Technical");
+    expect(text).not.toContain("Preferred callback");
+  });
+
+  it("handles a caller who was never identified", () => {
+    const { html, text } = renderEscalationEmail({ ...ticket, userName: "", userEmail: "", company: null });
+    expect(text).toContain("A caller reported an issue");
+    expect(text).toContain("Customer: Not identified on the call");
+    expect(text).not.toContain("Email:");
+    expect(html).not.toContain("Reply to the customer directly");
+  });
+});

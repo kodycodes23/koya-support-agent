@@ -2,8 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CallbackForm } from "./callback-form";
+import { ChatPanel } from "./chat-panel";
+import { getCallIdentityToken } from "./lib/call-identity";
+import { SignInModal } from "./sign-in-modal";
+import { useKoyaChat } from "./use-koya-chat";
 import { IdleTimeout } from "./idle-timeout";
 import { ProfileMenu } from "./profile-menu";
 import { writtenReferences } from "./references";
@@ -116,8 +121,8 @@ const TOPICS: { icon: IconName; title: string; body: string }[] = [
 ];
 
 const STEPS = [
-  { n: "01", title: "Ask out loud", body: "Describe what you need in your own words, the way you would to a colleague." },
-  { n: "02", title: "Koya checks", body: "It looks up RelayPay's approved help content, or your record once you're verified." },
+  { n: "01", title: "Speak or type", body: "Describe what you need in your own words, the way you would to a colleague." },
+  { n: "02", title: "Koya checks", body: "It looks up RelayPay's approved help content, or, once you've signed in, your own payments." },
   { n: "03", title: "Get an outcome", body: "A clear answer, a support ticket, or a callback from a specialist." },
 ];
 
@@ -141,8 +146,46 @@ export function SupportExperience({
   idleTimeoutSeconds?: number;
 }) {
   const call = useVapiCall(signedIn?.firstName);
+  const chat = useKoyaChat();
+  const router = useRouter();
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
   const preview = useOrbPreview(call.volume, call.micVolume);
+  // Voice or chat, never both: the mode can only change while neither is in use.
+  const [mode, setMode] = useState<"voice" | "chat">("voice");
+  const modeLocked = call.inCall || call.status === "connecting" || chat.active;
+  const [signInOpen, setSignInOpen] = useState(false);
+  const askedToSignIn = useRef<string | null>(null);
+
+  // Guest on a voice call: open the sign-in window as soon as Koya asks for it.
+  useEffect(() => {
+    if (signedIn || !call.inCall || !call.callId) return;
+    const callId = call.callId;
+    const id = window.setInterval(async () => {
+      if (askedToSignIn.current === callId) return;
+      const res = await fetch(`/api/koya/sign-in-request?callId=${encodeURIComponent(callId)}`, { cache: "no-store" }).catch(() => null);
+      const body = (await res?.json().catch(() => null)) as { requested?: boolean } | null;
+      if (body?.requested) {
+        askedToSignIn.current = callId;
+        setSignInOpen(true);
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [signedIn, call.inCall, call.callId]);
+
+  // Guest in the chat: Koya's reply says when to open the sign-in window.
+  const showSignIn = signInOpen || (chat.signInRequested && !signedIn);
+
+  // Signed in from the window: the same call or chat carries on as this customer.
+  const handleSignedIn = useCallback(async () => {
+    setSignInOpen(false);
+    if (call.inCall) {
+      const token = await getCallIdentityToken().catch(() => null);
+      if (token) call.sendIdentity(token);
+    } else if (chat.active) {
+      chat.continueSignedIn();
+    }
+    router.refresh(); // header, suggestions and callback form now reflect the signed-in customer
+  }, [call, chat, router]);
 
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -155,36 +198,54 @@ export function SupportExperience({
   return (
     <div className="flex min-h-screen flex-col">
       {/* Signed-in only; a live call counts as activity so nobody is signed out mid-call. */}
-      {signedIn && idleTimeoutSeconds && <IdleTimeout timeoutSeconds={idleTimeoutSeconds} busy={call.inCall} />}
+      {signedIn && idleTimeoutSeconds && <IdleTimeout timeoutSeconds={idleTimeoutSeconds} busy={call.inCall || chat.busy} />}
+      <SignInModal
+        open={showSignIn}
+        onClose={() => {
+          setSignInOpen(false);
+          chat.dismissSignIn();
+        }}
+        onSignedIn={() => void handleSignedIn()}
+      />
       {/* Top bar: logo at the top-left, two restrained actions on the right. */}
       {/* Full-width bar, so the logo sits at the top-left of the interface, per the brand direction. */}
       <header className="border-b border-border bg-surface">
         <nav className="flex w-full items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="RelayPay dashboard">
+          <Link href="/" className="flex items-center gap-2.5" aria-label="RelayPay home">
             <Image src="/relaypay-mark.svg" alt="" width={30} height={30} priority />
             <Image src="/relaypay-wordmark.svg" alt="RelayPay" width={104} height={14} priority />
             <span className="ml-1 hidden border-l border-border pl-3 text-sm text-muted sm:inline">Support</span>
           </Link>
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted hover:text-text md:inline-block">
-              Dashboard
-            </Link>
+            {signedIn && (
+              <Link href="/dashboard" className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted hover:text-text md:inline-block">
+                Dashboard
+              </Link>
+            )}
             <a href="#help" className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted hover:text-text lg:inline-block">
               What Koya handles
             </a>
-            <a href="#callback" className="hidden rounded-md border border-border px-3.5 py-2 text-sm font-medium text-text hover:bg-background sm:inline-block">
-              Request a callback
-            </a>
-            <button
-              type="button"
-              onClick={call.toggle}
-              disabled={!call.configured || call.status === "ending"}
-              className={`rounded-md px-3.5 py-2 text-sm font-medium disabled:opacity-50 ${
-                call.inCall ? "border border-danger text-danger hover:bg-danger-soft" : "bg-brand text-white hover:bg-brand-hover"
-              }`}
-            >
-              {call.inCall ? "End call" : "Talk to Koya"}
-            </button>
+            {signedIn ? (
+              <a href="#callback" className="hidden rounded-md border border-border px-3.5 py-2 text-sm font-medium text-text hover:bg-background sm:inline-block">
+                Request a callback
+              </a>
+            ) : (
+              <Link href="/signin" className="rounded-md border border-border px-3.5 py-2 text-sm font-medium text-text hover:bg-background">
+                Sign in
+              </Link>
+            )}
+            {mode === "voice" && (
+              <button
+                type="button"
+                onClick={call.toggle}
+                disabled={!call.configured || call.status === "ending" || chat.active}
+                className={`hidden rounded-md px-3.5 py-2 text-sm font-medium disabled:opacity-50 sm:inline-block ${
+                  call.inCall ? "border border-danger text-danger hover:bg-danger-soft" : "bg-brand text-white hover:bg-brand-hover"
+                }`}
+              >
+                {call.inCall ? "End call" : "Talk to Koya"}
+              </button>
+            )}
             {signedIn && (
               <ProfileMenu
                 fullName={signedIn.fullName}
@@ -202,15 +263,15 @@ export function SupportExperience({
         <section className="dot-grid mx-auto mt-6 max-w-6xl overflow-hidden rounded-2xl bg-navy text-on-navy">
           <div className="grid items-center gap-10 px-6 py-12 sm:px-10 lg:grid-cols-[1.05fr_1fr] lg:py-16">
             <div>
-              <Eyebrow onNavy>RelayPay support · voice</Eyebrow>
+              <Eyebrow onNavy>RelayPay support · voice or chat</Eyebrow>
               <h1 className="mt-5 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
                 Talk to <span className="text-accent-on-navy">Koya</span>,
                 <br />
                 your payments support assistant
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-on-navy-muted">
-                Ask about fees, payout timelines or a transaction reference. Koya answers from RelayPay&apos;s approved help
-                content and brings in a specialist when your case needs one.
+                Speak or type. Koya answers from RelayPay&apos;s approved help content, checks payments for signed-in customers, and
+                brings in a specialist when your case needs one.
               </p>
               {signedIn ? (
                 <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-navy-line px-3 py-1.5 text-sm text-on-navy">
@@ -222,16 +283,46 @@ export function SupportExperience({
                 </p>
               ) : (
                 <p className="mt-5 text-sm text-on-navy-muted">
-                  <Link href="/" className="text-accent-on-navy hover:underline">
+                  No account needed for general questions. Already a customer?{" "}
+                  <Link href="/signin" className="text-accent-on-navy hover:underline">
                     Sign in
                   </Link>{" "}
-                  first and Koya can check your account without asking you to verify.
+                  and Koya can help with your payments too.
                 </p>
               )}
 
-              {call.configured ? (
+              <div className="mt-8">
+                <div role="tablist" aria-label="How to talk to Koya" className="inline-flex rounded-lg border border-navy-line p-1">
+                  {(["voice", "chat"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={mode === m}
+                      disabled={modeLocked && mode !== m}
+                      onClick={() => setMode(m)}
+                      className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                        mode === m ? "bg-white text-navy" : "text-on-navy-muted hover:text-on-navy"
+                      }`}
+                    >
+                      {m === "voice" ? "Voice" : "Chat"}
+                    </button>
+                  ))}
+                </div>
+                {modeLocked && (
+                  <p className="mt-2 text-xs text-on-navy-muted">
+                    {mode === "voice" ? "End the call to switch to chat." : "End the chat to switch to voice."}
+                  </p>
+                )}
+              </div>
+
+              {mode === "chat" ? (
+                <p className="mt-6 max-w-md text-sm leading-6 text-on-navy-muted">
+                  Type your question in the chat window. Koya replies in a few seconds; end the chat when you&apos;re done.
+                </p>
+              ) : call.configured ? (
                 <>
-                  <div className="mt-8 flex flex-wrap items-center gap-3">
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={call.toggle}
@@ -254,11 +345,11 @@ export function SupportExperience({
                       >
                         {call.muted ? "Unmute" : "Mute"}
                       </button>
-                    ) : (
+                    ) : signedIn ? (
                       <a href="#callback" className="rounded-md border border-navy-line px-5 py-3 text-sm font-medium text-on-navy hover:bg-white/10">
                         Request a callback
                       </a>
-                    )}
+                    ) : null}
                   </div>
                   <p className="mt-4 text-sm text-on-navy-muted" role="status" aria-live="polite">
                     <span
@@ -296,17 +387,33 @@ export function SupportExperience({
             </div>
 
             <div className="mx-auto w-full max-w-md">
-              <CornerFrame live={inCall}>
-                <VoiceOrb
-                  tone="dark"
-                  status={status}
-                  inCall={inCall}
-                  volume={call.volume}
-                  micVolume={call.micVolume}
-                  onToggle={call.toggle}
-                  disabled={!call.configured || call.status === "ending"}
+              {mode === "chat" ? (
+                <ChatPanel
+                  messages={chat.messages}
+                  busy={chat.busy}
+                  error={chat.error}
+                  onSend={chat.send}
+                  onEnd={chat.end}
+                  locked={call.inCall}
+                  intro={
+                    signedIn
+                      ? `Hello ${signedIn.firstName}, I'm Koya. How can I help you today?`
+                      : "Hi, I'm Koya, RelayPay's support assistant. Ask me anything about RelayPay."
+                  }
                 />
-              </CornerFrame>
+              ) : (
+                <CornerFrame live={inCall}>
+                  <VoiceOrb
+                    tone="dark"
+                    status={status}
+                    inCall={inCall}
+                    volume={call.volume}
+                    micVolume={call.micVolume}
+                    onToggle={call.toggle}
+                    disabled={!call.configured || call.status === "ending" || chat.active}
+                  />
+                </CornerFrame>
+              )}
             </div>
           </div>
 
@@ -314,7 +421,7 @@ export function SupportExperience({
           <ul className="grid border-t border-navy-line text-sm text-on-navy-muted sm:grid-cols-3">
             {[
               "Answers only from approved RelayPay help content",
-              "Account details only after identity verification",
+              "Account help only for signed-in customers",
               "Specialist handover for account and compliance issues",
             ].map((item, i) => (
               <li key={item} className={`flex items-center gap-3 px-6 py-4 sm:px-10 ${i > 0 ? "border-t border-navy-line sm:border-l sm:border-t-0" : ""}`}>
@@ -325,7 +432,7 @@ export function SupportExperience({
           </ul>
         </section>
 
-        {showTranscript && (
+        {mode === "voice" && showTranscript && (
           <section className="mx-auto mt-6 max-w-6xl rounded-2xl border border-border bg-surface" aria-label="Live transcript">
             <div className="flex items-center justify-between border-b border-border px-6 py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Live transcript</p>
@@ -358,7 +465,7 @@ export function SupportExperience({
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <Eyebrow>What Koya handles</Eyebrow>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">First-line support, by voice</h2>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">First-line support, by voice or chat</h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-muted">
               For anything that needs a person, Koya collects your details and hands over to the RelayPay team.
@@ -392,7 +499,8 @@ export function SupportExperience({
           </ol>
         </section>
 
-        {/* Callback request */}
+        {/* Callback request (customers; guests ask Koya, which can book the onboarding team) */}
+        {signedIn ? (
         <section id="callback" className="mx-auto max-w-6xl scroll-mt-6 py-20">
           <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center sm:px-10">
             <Eyebrow>Prefer a person?</Eyebrow>
@@ -405,13 +513,16 @@ export function SupportExperience({
             </div>
           </div>
         </section>
+        ) : (
+          <div className="pb-20" />
+        )}
       </main>
 
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2.5">
             <Image src="/relaypay-mark.svg" alt="" width={22} height={22} />
-            <span>© {new Date().getFullYear()} RelayPay. Calls are logged to improve support.</span>
+            <span>© {new Date().getFullYear()} RelayPay. Calls and chats are logged to improve support.</span>
           </div>
           <span>Koya never asks for passwords or full account numbers.</span>
         </div>

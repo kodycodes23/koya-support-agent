@@ -19,6 +19,7 @@ import { agentConfig } from "../config.ts";
 import { ConversationStore } from "../db.ts";
 import { env } from "../env.ts";
 import { renderEvidence, type ScenarioOutcome } from "./evidence.ts";
+import { GUEST_BRIEFING } from "../agent/prompt.ts";
 import { SCENARIOS, VOICE_STYLE_CHECKS, type EvalContext, type Scenario } from "./scenarios.ts";
 
 const log = createLogger("eval", process.env.LOG_LEVEL ?? "warn");
@@ -53,11 +54,12 @@ function describeActual(results: TurnResult[], tickets: Record<string, unknown>[
 }
 
 async function runScenario(runId: string, scenario: Scenario): Promise<ScenarioOutcome> {
-  const convo = await store.create({ channel: "eval", callerId: `eval:${scenario.id}`, metadata: { run_id: runId, scenario_id: scenario.id } });
+  // Guest scenarios play a visitor on the public website: flagged so the MCP tools treat them as one.
+  const convo = await store.create({ channel: "eval", callerId: `eval:${scenario.id}`, metadata: { run_id: runId, scenario_id: scenario.id, ...(scenario.guest ? { guest: true } : {}) } });
   const results: TurnResult[] = [];
   let session: string | null = null;
   for (const text of scenario.turns) {
-    const turn = await turns.handleTurn({ conversationId: convo.id, channel: "eval", userText: text, resumeSessionId: session });
+    const turn = await turns.handleTurn({ conversationId: convo.id, channel: "eval", userText: text, resumeSessionId: session, ...(scenario.guest ? { callerContext: GUEST_BRIEFING } : {}) });
     session = turn.sessionId ?? session;
     results.push(turn);
   }

@@ -54,7 +54,7 @@ describe("MCP server over Streamable HTTP", () => {
     const { tools } = await client.listTools();
     await client.close();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["create_escalation", "create_support_ticket", "log_conversation_event", "lookup_customer", "lookup_payout", "lookup_transaction", "search_knowledge_base"],
+      ["create_escalation", "create_support_ticket", "log_conversation_event", "lookup_customer", "lookup_payout", "lookup_transaction", "request_sign_in", "search_knowledge_base"],
     );
   });
 
@@ -123,6 +123,7 @@ describe("MCP server over Streamable HTTP", () => {
   it("create_support_ticket stores a ticket and returns its number", async () => {
     const convo = newConversation();
     const res = await call(convo, "create_support_ticket", {
+      caller_agreement: "please log it",
       category: "invoice",
       priority: "medium",
       summary: "Invoice payment failed; customer wants it reviewed.",
@@ -131,6 +132,13 @@ describe("MCP server over Streamable HTTP", () => {
     expect(res).toMatchObject({ ticket_id: expect.stringMatching(/^TKT-\d+$/), status: "open" });
     // Unknown transaction reference is dropped rather than breaking the insert.
     expect(fake.tables.support_tickets!.at(-1)).toMatchObject({ conversation_id: convo, transaction_id: null });
+  });
+
+  it("create_support_ticket refuses to run without the caller's agreement", async () => {
+    const client = await connect(newConversation());
+    const res = await client.callTool({ name: "create_support_ticket", arguments: { category: "technical", priority: "medium", summary: "Dashboard shows a blank error." } });
+    await client.close();
+    expect(res.isError).toBe(true);
   });
 
   it("create_escalation stores the callback request and logs an event", async () => {

@@ -31,9 +31,32 @@ export const chatRequestSchema = z
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
 
-/** The signed-in caller token, wherever this Vapi version puts call metadata. */
+/** How a customer who signs in partway through a voice call hands Koya their token (a system message). */
+export const IDENTITY_MARKER = /\[koya-identity:([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\]/;
+
+/**
+ * The signed-in caller token: call metadata (set when the call or chat starts) or, for a voice
+ * caller who signed in mid-call, the newest system message carrying IDENTITY_MARKER. Either way it
+ * is only a claim until verifyIdentityToken checks its signature.
+ */
 export function identityTokenOf(body: ChatRequest): string | undefined {
-  return body.metadata?.identityToken ?? body.call?.assistantOverrides?.metadata?.identityToken;
+  const fromMetadata = body.metadata?.identityToken ?? body.call?.assistantOverrides?.metadata?.identityToken;
+  if (fromMetadata) return fromMetadata;
+  for (let i = body.messages.length - 1; i >= 0; i--) {
+    const m = body.messages[i]!;
+    if (m.role !== "system") continue;
+    const hit = IDENTITY_MARKER.exec(messageText(m.content));
+    if (hit) return hit[1];
+  }
+  return undefined;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Website chat session id (metadata.chatSessionId), when this request comes from the chat window. */
+export function chatSessionIdOf(body: ChatRequest): string | null {
+  const id = (body.metadata as Record<string, unknown> | undefined)?.chatSessionId;
+  return typeof id === "string" && UUID.test(id) ? id : null;
 }
 
 export function messageText(content: ChatRequest["messages"][number]["content"]): string {

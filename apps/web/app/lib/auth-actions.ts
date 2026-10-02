@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticate } from "./customers";
+import { db } from "./db";
 import { createSession, deleteSession } from "./session";
 
 export interface LoginState {
@@ -23,7 +24,8 @@ function throttled(ip: string): boolean {
   return recent.length > MAX_ATTEMPTS;
 }
 
-export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
+/** Shared checks for both sign-in forms: the customer ID on success, or the error to show. */
+async function authenticateForm(formData: FormData): Promise<{ customerId: string } | LoginState> {
   const identifier = String(formData.get("identifier") ?? "").slice(0, 200);
   const password = String(formData.get("password") ?? "").slice(0, 200);
   if (!identifier.trim() || !password) return { error: "Enter your email or first name, and your password.", identifier };
@@ -39,17 +41,39 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: "We couldn't sign you in right now. Please try again.", identifier };
   }
   if (!customerId) return { error: "Email or password is incorrect.", identifier };
+  return { customerId };
+}
 
-  await createSession(customerId);
+export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  const result = await authenticateForm(formData);
+  if (!("customerId" in result)) return result;
+  await createSession(result.customerId);
   redirect("/dashboard"); // relative: works on any deployment host
+}
+
+export interface KoyaSignInState extends LoginState {
+  ok?: boolean;
+  firstName?: string;
+}
+
+/**
+ * Sign-in from the window Koya opens mid-conversation: same checks and session as the sign-in
+ * page, but stays on the page so the call or chat can carry on as this customer.
+ */
+export async function signInFromKoya(_prev: KoyaSignInState, formData: FormData): Promise<KoyaSignInState> {
+  const result = await authenticateForm(formData);
+  if (!("customerId" in result)) return result;
+  await createSession(result.customerId);
+  const { data } = await db().from("customers").select("contact_name").eq("customer_id", result.customerId).maybeSingle();
+  return { ok: true, firstName: String(data?.contact_name ?? "").split(/\s+/)[0] ?? "" };
 }
 
 export async function logout(): Promise<void> {
   await deleteSession();
-  redirect("/");
+  redirect("/signin");
 }
 
 export async function idleLogout(): Promise<void> {
   await deleteSession();
-  redirect("/?signed-out=idle");
+  redirect("/signin?signed-out=idle");
 }

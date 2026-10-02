@@ -93,7 +93,7 @@ describe("duplicate escalations", () => {
 describe("duplicate tickets", () => {
   it("reuses a ticket on the same call and across calls for the same customer and issue", async () => {
     const convo = conversation("CUS-1005");
-    const args = { category: "invoice", priority: "medium", summary: "Invoice payment failed; Patrick wants it reviewed." };
+    const args = { category: "invoice", priority: "medium", caller_agreement: "yes, log it", summary: "Invoice payment failed; Patrick wants it reviewed." };
     const first = await call(convo, "create_support_ticket", args);
     expect(first).not.toHaveProperty("already_open");
     expect(await call(convo, "create_support_ticket", args)).toMatchObject({ ticket_id: first.ticket_id, already_open: true });
