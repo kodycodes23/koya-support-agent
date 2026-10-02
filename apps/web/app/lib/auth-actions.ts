@@ -28,7 +28,7 @@ function throttled(ip: string): boolean {
 async function authenticateForm(formData: FormData): Promise<{ customerId: string } | LoginState> {
   const identifier = String(formData.get("identifier") ?? "").slice(0, 200);
   const password = String(formData.get("password") ?? "").slice(0, 200);
-  if (!identifier.trim() || !password) return { error: "Enter your email or first name, and your password.", identifier };
+  if (!identifier.trim() || !password) return { error: "Enter your email address and password.", identifier };
 
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
   if (throttled(ip)) return { error: "Too many sign-in attempts. Please wait a few minutes and try again.", identifier };

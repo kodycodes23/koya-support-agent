@@ -10,15 +10,16 @@ export function LoginForm() {
     <form action={action} className="space-y-4" noValidate>
       <div>
         <label htmlFor="identifier" className="mb-1.5 block text-sm font-medium text-text">
-          Email or first name
+          Email
         </label>
         <input
           id="identifier"
           name="identifier"
-          autoComplete="username"
+          type="email"
+          autoComplete="email"
           required
           defaultValue={state.identifier}
-          placeholder="amara@lagosledger.example"
+          placeholder="you@company.com"
           className={field}
           aria-invalid={Boolean(state.error)}
         />

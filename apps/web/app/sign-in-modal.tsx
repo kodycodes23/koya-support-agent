@@ -52,9 +52,9 @@ export function SignInModal({ open, onClose, onSignedIn }: { open: boolean; onCl
         <form action={action} className="mt-5 space-y-4" noValidate>
           <div>
             <label htmlFor="koya-identifier" className="mb-1.5 block text-sm font-medium">
-              Email or first name
+              Email
             </label>
-            <input id="koya-identifier" name="identifier" autoComplete="username" required defaultValue={state.identifier} className={fieldClass} aria-invalid={Boolean(state.error)} autoFocus />
+            <input id="koya-identifier" name="identifier" type="email" autoComplete="email" required defaultValue={state.identifier} className={fieldClass} aria-invalid={Boolean(state.error)} autoFocus />
           </div>
           <div>
             <label htmlFor="koya-password" className="mb-1.5 block text-sm font-medium">

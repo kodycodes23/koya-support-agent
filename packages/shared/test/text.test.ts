@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SpokenStream, maskSensitive, sanitizeSpoken, writtenReferences, typedFieldOf, typedValues } from "../src/text.ts";
+import { SpokenStream, maskSensitive, sanitizeSpoken, spokenReferences, writtenReferences, typedFieldOf, typedValues } from "../src/text.ts";
 
 function streamed(fragments: string[]) {
   const s = new SpokenStream();
@@ -59,5 +59,24 @@ describe("typed input during a voice call", () => {
     expect(typedFieldOf("Kosisochukwu Nebolisa")).toBe("name");
     expect(typedFieldOf("kosi.nebolisa@example.com")).toBe("email");
     expect(typedFieldOf("pay 7001")).toBe("reference");
+  });
+});
+
+describe("references on voice calls", () => {
+  it("are spelled out letter by letter and digit by digit", () => {
+    expect(spokenReferences("Your customer ID is CUS-1001.")).toBe("Your customer ID is C U S, one zero zero one.");
+    expect(spokenReferences("Ticket tkt 1035 and payout PAY-7002")).toBe("Ticket T K T, one zero three five and payout P A Y, seven zero zero two");
+  });
+  it("are spelled out even when the reference arrives in two streamed pieces", () => {
+    const s = new SpokenStream({ spellReferences: true });
+    const out = s.push("Your customer ID is CUS-10") + s.push("01. Anything else?") + s.flush();
+    expect(out).toBe("Your customer ID is C U S, one zero zero one. Anything else?");
+  });
+  it("stay written for chat", () => {
+    const s = new SpokenStream();
+    expect(s.push("Your ticket is TKT-1035.") + s.flush()).toBe("Your ticket is TKT-1035.");
+  });
+  it("round-trip back to the written form for records", () => {
+    expect(writtenReferences(spokenReferences("Case ESC-5040 opened"))).toBe("Case ESC-5040 opened");
   });
 });

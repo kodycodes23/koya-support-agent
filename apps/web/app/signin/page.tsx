@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { db } from "../lib/db";
 import { getSession } from "../lib/session";
 import { LoginForm } from "../login-form";
 
@@ -10,20 +9,6 @@ export const metadata: Metadata = {
   title: "Sign in · RelayPay",
   description: "Sign in to your RelayPay business account.",
 };
-
-/** Demo sign-in hints (names and companies only). Set DEMO_LOGIN_HINTS=0 to hide them. */
-async function demoAccounts(): Promise<{ first: string; company: string }[]> {
-  if (process.env.DEMO_LOGIN_HINTS === "0") return [];
-  try {
-    const { data } = await db().from("customers").select("contact_name, company_name").order("customer_id");
-    return ((data ?? []) as { contact_name: string; company_name: string }[]).map((c) => ({
-      first: c.contact_name.split(/\s+/)[0] ?? c.contact_name,
-      company: c.company_name,
-    }));
-  } catch {
-    return [];
-  }
-}
 
 function FlowLines() {
   return (
@@ -47,7 +32,6 @@ function FlowLines() {
 export default async function LoginPage({ searchParams }: PageProps<"/signin">) {
   if (await getSession()) redirect("/dashboard");
   const idleSignOut = (await searchParams)["signed-out"] === "idle";
-  const accounts = await demoAccounts();
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
@@ -90,7 +74,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/signin">) 
             <span aria-hidden className="opacity-60">[</span>Business account<span aria-hidden className="opacity-60">]</span>
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-text">Sign in</h2>
-          <p className="mt-2 text-sm text-muted">Use the email on your account or your first name.</p>
+          <p className="mt-2 text-sm text-muted">Use the email address on your account.</p>
           {idleSignOut && (
             <p className="mt-6 rounded-md bg-accent-soft px-3 py-2 text-sm text-brand" role="status">
               You were signed out after 10 minutes of inactivity. Sign in again to continue.
@@ -120,24 +104,6 @@ export default async function LoginPage({ searchParams }: PageProps<"/signin">) 
             Sign in as admin
           </Link>
 
-          {accounts.length > 0 && (
-            <details className="mt-8 rounded-lg border border-border bg-surface p-4 text-sm">
-              <summary className="cursor-pointer font-medium text-text">Demo accounts</summary>
-              <p className="mt-2 text-muted">
-                Password is the first name in lowercase followed by <span className="font-mono text-text">123</span>.
-              </p>
-              <ul className="mt-3 space-y-1.5">
-                {accounts.map((a) => (
-                  <li key={a.first} className="flex justify-between gap-3">
-                    <span className="text-text">
-                      {a.first} <span className="text-muted">· {a.company}</span>
-                    </span>
-                    <span className="font-mono text-muted">{a.first.toLowerCase()}123</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
         </div>
       </main>
     </div>

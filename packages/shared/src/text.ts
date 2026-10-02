@@ -45,6 +45,9 @@ export class SpokenStream {
   private atLineStart = true;
   private pending = "";
 
+  /** `spellReferences`: for text-to-speech, say "CUS-1001" as "C U S, one zero zero one" (never "minus one thousand one"). */
+  constructor(private readonly opts: { spellReferences?: boolean } = {}) {}
+
   push(fragment: string): string {
     this.pending += fragment;
     // Hold back a trailing partial token (possible URL or line-start marker) until more arrives.
@@ -69,13 +72,23 @@ export class SpokenStream {
       out += l;
       this.atLineStart = l.endsWith("\n");
     }
-    return out
+    const spoken = this.opts.spellReferences ? spokenReferences(out) : out;
+    return spoken
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/https?:\/\/\S+/g, "")
       .replace(/\]\(\)?|[[\]]/g, "") // leftovers of a link split across fragments; brackets are never spoken
       .replace(/\*\*|__|`+/g, "")
       .replace(/\p{Extended_Pictographic}/gu, "");
   }
+}
+
+const SPOKEN_DIGIT = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/** "Your case is ESC-5040." → "Your case is E S C, five zero four zero." Letters and digits one at a time. */
+export function spokenReferences(text: string): string {
+  return text.replace(/\b(TKT|TXN|PAY|ESC|CUS)[-\s]?(\d{4,6})\b/gi, (_, prefix: string, digits: string) =>
+    `${prefix.toUpperCase().split("").join(" ")}, ${digits.split("").map((d) => SPOKEN_DIGIT[Number(d)]).join(" ")}`,
+  );
 }
 
 /**

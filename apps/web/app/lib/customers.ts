@@ -54,16 +54,16 @@ function safeEqual(a: string, b: string): boolean {
  * Checks a login against the seed customers: the identifier is the contact email or the
  * contact's first name (case-insensitive). Returns the customer on success, otherwise null.
  */
-export async function authenticate(identifier: string, password: string): Promise<Customer | null> {
-  const id = identifier.trim().toLowerCase();
+/** Signs in by account email (unique per customer) and password. */
+export async function authenticate(email: string, password: string): Promise<Customer | null> {
+  const id = email.trim().toLowerCase();
   // Demo rule, so be forgiving: ignore capitalisation and stray spaces from autofill ("Efua123 ").
   password = password.trim().toLowerCase();
-  if (!id || !password) return null;
-  const { data, error } = await db().from("customers").select(CUSTOMER_COLUMNS);
+  if (!id || !password || !id.includes("@")) return null;
+  // Exact match on the email; escape LIKE wildcards so "%" can't match other accounts.
+  const { data, error } = await db().from("customers").select(CUSTOMER_COLUMNS).ilike("contact_email", id.replace(/[\\%_]/g, "\\$&")).maybeSingle();
   if (error) throw new Error(`customers lookup: ${error.message}`);
-  const customer = ((data ?? []) as Customer[]).find(
-    (c) => c.contact_email.toLowerCase() === id || firstNameOf(c).toLowerCase() === id,
-  );
+  const customer = (data as Customer | null) ?? undefined;
   // Compare even when no customer matched, so timing doesn't reveal which identifiers exist.
   const expected = customer ? demoPasswordFor(customer) : "no-such-customer-000";
   return safeEqual(password, expected) && customer ? customer : null;

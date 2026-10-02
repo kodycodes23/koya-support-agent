@@ -229,7 +229,8 @@ async function attempt(cfg: AgentConfig, input: TurnInput, resume: boolean, pool
   }, cfg.turnTimeoutMs);
 
   const stripper = new MetaTagStripper();
-  const spoken = new SpokenStream();
+  // Voice: references are spelled out in code, so the caller never hears "C U S minus one thousand one".
+  const spoken = new SpokenStream({ spellReferences: input.channel === "voice" });
   const toolsUsed: string[] = [];
   let reply = "";
   let firstTextMs: number | null = null;
