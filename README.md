@@ -116,7 +116,7 @@ The agent uses the Claude Agent SDK with no filesystem settings (`settingSources
 ## 6. Run the evaluations
 
 ```bash
-pnpm eval              # runs scenarios 1–8 from assets/test-scenarios.md plus 11–13 (out of scope, prompt injection, harmful request), writes the evaluations table and docs/TESTING_EVIDENCE.md
+pnpm eval              # runs scenarios 1–8 from assets/test-scenarios.md plus 11–14 (out of scope, prompt injection, harmful request, balance request), writes the evaluations table and docs/TESTING_EVIDENCE.md
 pnpm eval --only 3,6   # a subset (doesn't rewrite the evidence doc)
 ```
 
