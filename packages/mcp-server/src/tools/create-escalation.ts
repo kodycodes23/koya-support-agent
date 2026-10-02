@@ -1,4 +1,4 @@
-import { ESCALATION_CATEGORIES, emailConfigFromEnv, notifySupportTeam, referencesIn } from "@koya/shared";
+import { ESCALATION_CATEGORIES, callbackTimeProblem, emailConfigFromEnv, notifySupportTeam, referencesIn } from "@koya/shared";
 import { z } from "zod";
 import { inBackground } from "../background.ts";
 import { defineTool } from "../define-tool.ts";
@@ -99,11 +99,26 @@ export const createEscalation = defineTool({
         "Case summary for the specialist, 2 to 4 sentences: what the caller reported in their own words, what you checked and found " +
           "(references and statuses), what they need from the specialist, and how they are feeling if it matters (e.g. frustrated, urgent).",
       ),
-    preferred_time: z.string().max(200).optional().describe("Preferred callback time as the caller said it"),
+    preferred_time: z.string().max(200).optional().describe("Preferred callback time as the caller said it. Must be between 9:30am and 4:30pm (working hours 9am to 5pm)"),
     ticket_id: z.string().max(40).optional().describe("Related ticket number such as TKT-1001"),
     customer_id: z.string().max(40).optional(),
   },
   handler: async (input, ctx) => {
+    // Callbacks only inside working hours (9:30am to 4:30pm); nothing is saved for another time.
+    const hoursProblem = callbackTimeProblem(input.preferred_time);
+    if (hoursProblem) {
+      return {
+        status: "denied",
+        result: {
+          escalation_id: null,
+          outside_callback_hours: true,
+          next_step:
+            `Nothing was booked. ${hoursProblem} Tell the caller clearly that we can't call them at that time and why ` +
+            "(our team works from 9am to 5pm, and callbacks can't start in the first or last 30 minutes), then ask which time between 9:30am and 4:30pm suits them. " +
+            "Don't say anyone will call until create_escalation returns an escalation_id.",
+        },
+      };
+    }
     // Signed-in / verified callers: take contact details from their account, never from a guess.
     const verifiedId = await verifiedCustomerFor(ctx);
     // What the caller typed on screen beats what speech-to-text heard (names, emails).
@@ -119,7 +134,11 @@ export const createEscalation = defineTool({
     if (!userName || !userEmail) {
       return {
         status: "denied",
-        result: { escalation_id: null, next_step: "Ask the caller for their name and email address before escalating." },
+        result: {
+          escalation_id: null,
+          next_step:
+            "Nothing was created yet, so don't tell the caller anyone will call. Ask for their full name and email address (they can type them), then call create_escalation again with them.",
+        },
       };
     }
     const [ticketUuid, customerId] = await Promise.all([
@@ -159,7 +178,7 @@ export const createEscalation = defineTool({
             status: open.row.status as string,
             already_open: true,
             follow_up_summary: open.row.follow_up_summary as string | null,
-            next_step: "This was already escalated on this call. Do not call create_escalation again. Confirm the existing case number and the follow-up in one sentence.",
+            next_step: `This was already escalated on this call as ${open.row.escalation_ref as string}. Don't call create_escalation again; remind the caller of the case number and what happens next: ${String(open.row.follow_up_summary ?? "a specialist will follow up")}.`,
           },
         };
       }
@@ -190,8 +209,8 @@ export const createEscalation = defineTool({
             follow_up_summary: followUp,
             next_step:
               `The caller already has an open case for this, ${ref}, opened ${spokenDate(open.row.created_at)}. No new case was created. ` +
-              "Tell them the case number, that it is still open and that you have let the specialist team know they called again" +
-              `${newTime ? ", with their new callback time" : ""}. Do not promise outcomes or timelines, and stop troubleshooting.`,
+              "Tell them the case number, that it is still open, and that you've let the specialist team know they got in touch again" +
+              `${newTime ? `, with their new callback time (${newTime})` : ""}. Then say what happens next: ${followUp} Do not promise outcomes or timelines, and stop troubleshooting.`,
           },
         };
       }
@@ -235,7 +254,11 @@ export const createEscalation = defineTool({
           escalation_id: ref,
           status: data.status as string,
           follow_up_summary: followUp,
-          next_step: "Confirm the follow-up to the caller in one or two sentences. Do not promise outcomes or timelines, and stop troubleshooting.",
+          next_step:
+            `The case is created. In two or three short sentences, tell the caller what happens next: their case number is ${ref}; ` +
+            `${input.category === "onboarding" ? "RelayPay's onboarding team" : "a RelayPay specialist"} now has the details from this conversation, so they won't need to explain it again; ` +
+            `${input.preferred_time ? `they'll be called around ${input.preferred_time} and followed up by email` : "they'll be contacted by email"}; ` +
+            "and there's nothing else they need to do for now. Don't promise outcomes or timelines, and stop troubleshooting.",
         },
       };
     });

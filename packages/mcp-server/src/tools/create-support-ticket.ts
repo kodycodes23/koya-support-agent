@@ -117,7 +117,7 @@ export const createSupportTicket = defineTool({
             already_open: true,
             ...(repeat ? { opened: spokenDate(open.row.created_at) } : {}),
             next_step: repeat
-              ? `The caller already has an open ticket for this, ${ref}, opened ${spokenDate(open.row.created_at)}. No new ticket was created. Tell them the number, that it is still open and that you've noted they called again. Do not promise a timeline.`
+              ? `The caller already has an open ticket for this, ${ref}, opened ${spokenDate(open.row.created_at)}. No new ticket was created. Tell them the number, that it is still open, that you've let the support team know they got in touch again, and that the team will get back to them by email. Do not promise a timeline.`
               : "This ticket was already created on this call. Do not create another; confirm the existing ticket number in one sentence.",
           },
         };
@@ -142,7 +142,10 @@ export const createSupportTicket = defineTool({
         result: {
           ticket_id: data.ticket_ref as string,
           status: data.status as string,
-          next_step: "Tell the caller their ticket number and that the support team will follow up. Do not promise a timeline.",
+          next_step:
+            `The ticket is created. In two or three short sentences, tell the caller what happens next: their ticket number is ${data.ticket_ref as string}; ` +
+            "RelayPay's support team has been sent the details from this conversation and will look into it; they'll get back to the customer by email; " +
+            "and there's nothing else the customer needs to do for now. Don't promise a timeline.",
         },
       };
     });

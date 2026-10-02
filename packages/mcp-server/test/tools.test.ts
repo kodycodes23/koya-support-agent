@@ -166,6 +166,16 @@ describe("MCP server over Streamable HTTP", () => {
     expect(await call(anonymous, "create_escalation", { category: "other", reason: "Needs a callback." })).toMatchObject({ escalation_id: null });
   });
 
+  it("create_escalation refuses a callback outside 9:30am to 4:30pm and saves nothing", async () => {
+    const convo = newConversation();
+    const before = fake.tables.escalations!.length;
+    for (const preferred_time of ["tomorrow at 9am", "Friday at 5pm", "4:45pm", "this evening"]) {
+      const res = await call(convo, "create_escalation", { user_name: "Daniel Mwangi", user_email: "daniel@nairobiops.example", category: "account", reason: "Account restricted, needs help.", preferred_time });
+      expect(res, preferred_time).toMatchObject({ escalation_id: null, outside_callback_hours: true });
+    }
+    expect(fake.tables.escalations!.length).toBe(before);
+  });
+
   it("create_escalation rejects an invalid email via schema validation", async () => {
     const client = await connect(newConversation());
     const res = await client.callTool({

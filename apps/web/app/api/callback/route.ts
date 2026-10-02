@@ -1,3 +1,4 @@
+import { CALLBACK_HOURS_MESSAGE, callbackTimeProblem } from "@koya/shared/working-hours";
 import { DUPLICATE_WINDOW_MINUTES, REPEAT_WINDOW_HOURS, referencesIn, sameIssue, since } from "@koya/shared/duplicates";
 import { emailConfigFromEnv, notifySupportTeam } from "@koya/shared/email";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -23,7 +24,12 @@ const bodySchema = z
     topic: z.enum(["payments", "account", "other"]),
     // Required for "Something else": the topic alone tells the specialist nothing.
     details: z.string().trim().max(DETAILS_MAX, `Please keep the description under ${DETAILS_MAX} characters.`).optional(),
-    preferredTime: z.string().trim().max(120).optional(),
+    preferredTime: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .refine((t) => !callbackTimeProblem(t), { message: `${CALLBACK_HOURS_MESSAGE} Please choose a time in that window.` }),
     // Honeypot: hidden from people, often filled in by bots.
     company: z.string().max(500).optional(),
   })
@@ -199,5 +205,9 @@ export async function POST(request: Request) {
       repeatContact: null,
     }),
   );
-  return Response.json({ ok: true, reference: data.escalation_ref as string, message: followUp });
+  return Response.json({
+    ok: true,
+    reference: data.escalation_ref as string,
+    message: `${followUp} They'll have the details you've shared here, so you won't need to explain it again.`,
+  });
 }

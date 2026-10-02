@@ -463,12 +463,32 @@ export const SCENARIOS: Scenario[] = [
       "My name is Chi Kodi a Gorua.",
       "[typed name] Chikodi Agorua",
       "My email is chikodi@example.com.",
-      "Monday at 9am.",
+      "Monday at 10am.",
     ],
     expected: ["Use the typed name in place of the misheard one for the onboarding escalation."],
     checks: [
       usedTool("create_escalation"),
       recordCreated("escalations", (r) => r.user_name === "Chikodi Agorua", " (with the typed name)"),
+    ],
+  },
+  {
+    id: "22",
+    name: "Callback outside working hours",
+    prdArea: "Human Escalation",
+    turns: [
+      "My account was restricted and I need help.",
+      "I'm Daniel Mwangi from NairobiOps, daniel@nairobiops.example.",
+      "Can you call me tomorrow at 9am?",
+      "Okay, tomorrow at 11am then.",
+    ],
+    expected: [
+      "Decline 9am politely: working hours are 9am to 5pm, callbacks 9:30am to 4:30pm.",
+      "Book the escalation for the in-hours time instead.",
+    ],
+    checks: [
+      says("explains the callback hours", /9:30|nine thirty|working hours/i),
+      recordCreated("escalations", (r) => /11/.test(String(r.preferred_time)) && r.call_booked === true, " (booked for 11am)"),
+      { name: "nothing booked for 9am", run: (c) => !c.escalations.some((e) => /\b9\s*(:00)?\s*a\.?m/i.test(String(e.preferred_time))) || "an escalation was booked for 9am" },
     ],
   },
 ];

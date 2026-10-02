@@ -6,3 +6,4 @@ export * from "./text.ts";
 export * from "./embeddings.ts";
 export * from "./email.ts";
 export * from "./duplicates.ts";
+export * from "./working-hours.ts";

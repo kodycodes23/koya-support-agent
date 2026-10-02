@@ -68,7 +68,7 @@ export function CallbackForm() {
         <option value="other">Something else</option>
       </select>
       <label className="sr-only" htmlFor="cb-time">Preferred time</label>
-      <input id="cb-time" name="preferredTime" placeholder="Preferred time (optional)" className={field} />
+      <input id="cb-time" name="preferredTime" placeholder="Preferred time, 9:30am–4:30pm (optional)" className={field} />
       <button
         type="submit"
         disabled={state.kind === "sending"}
