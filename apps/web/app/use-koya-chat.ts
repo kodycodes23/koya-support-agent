@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { chatErrorMessage } from "./friendly-errors";
 
 export interface ChatMessage {
   id: number;
@@ -47,7 +48,7 @@ export function useKoyaChat() {
         });
         if (!res.ok || !res.body) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? "Koya couldn't reply. Please try again.");
+          throw Object.assign(new Error(body.error ?? "chat request failed"), { status: res.status });
         }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -74,7 +75,7 @@ export function useKoyaChat() {
         setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: reply.trim(), pending: false } : m)));
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
-        setError((e as Error).message);
+        setError(chatErrorMessage(e, (e as { status?: number }).status));
         setMessages((prev) => prev.filter((m) => m.id !== replyId));
       } finally {
         setBusy(false);

@@ -3,6 +3,7 @@
 import Vapi from "@vapi-ai/web";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCallIdentityToken } from "./lib/call-identity";
+import { voiceErrorMessage } from "./friendly-errors";
 import { typedFieldOf } from "./references";
 
 export type CallStatus = "idle" | "connecting" | "listening" | "speaking" | "ending" | "ended" | "error";
@@ -34,15 +35,7 @@ function isTranscript(m: unknown): m is TranscriptMessage {
   return msg?.type === "transcript" && typeof msg.transcript === "string" && (msg.role === "user" || msg.role === "assistant");
 }
 
-function errorText(e: unknown): string {
-  const err = e as { error?: { message?: string; msg?: string } | string; message?: string; errorMsg?: string } | null;
-  const raw =
-    (typeof err?.error === "string" ? err.error : err?.error?.message ?? err?.error?.msg) ?? err?.errorMsg ?? err?.message ?? "";
-  if (/permission|NotAllowed|microphone/i.test(raw)) {
-    return "Microphone access was blocked. Allow the microphone for this site and try again.";
-  }
-  return raw ? `The call could not continue: ${raw}` : "The call could not continue. Please try again.";
-}
+const errorText = voiceErrorMessage;
 
 /**
  * Owns the Vapi web client: call lifecycle, live transcript, mute, and a
@@ -137,7 +130,7 @@ export function useVapiCall(firstName?: string | null) {
       });
       if (!call) {
         setStatus("error");
-        setError("The call could not be started. Please try again.");
+        setError("We couldn't start the call. Please try again in a few seconds, or switch to Chat.");
       } else {
         setCallId(call.id ?? null);
       }
